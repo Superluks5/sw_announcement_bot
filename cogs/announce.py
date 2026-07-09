@@ -46,7 +46,7 @@ TEMPLATE = """🌌 「 SERVER ANNOUNCEMENT 」 🌌
 
 def polish_text(draft: str) -> tuple[str, str]:
     prompt = f"""You are helping write a professional Discord server announcement
-for a Star Wars themed Roblox game community. Take the rough draft below and:
+for a Star Wars themed Roblox game community taking place in the Imperial Timeline. (Roblox Game is in Development) Take the rough draft below and:
 
 1. Write a short, clear title (no more than 6 words, no emojis, no quotes around it)
 2. Rewrite the body in clear, professional, concise language. Keep it friendly
