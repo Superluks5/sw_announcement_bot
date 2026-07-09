@@ -44,7 +44,7 @@ TEMPLATE = """🌌 「 SERVER ANNOUNCEMENT 」 🌌
 
 def polish_text(draft: str) -> tuple[str, str]:
     prompt = f"""You are helping write a professional Discord server announcement
-for a Star Wars themed Roblox game in Empire timeline community. Take the rough draft below and:
+for a Star Wars themed Roblox game community. Take the rough draft below and:
 
 1. Write a short, clear title (no more than 6 words, no emojis, no quotes around it)
 2. Rewrite the body in clear, professional, concise language. Keep it friendly
@@ -79,6 +79,10 @@ BODY: <body here>"""
 
 
 class AnnounceModal(discord.ui.Modal, title="New Announcement"):
+    def __init__(self, ping_mention: str = ""):
+        super().__init__()
+        self.ping_mention = ping_mention
+
     draft = discord.ui.TextInput(
         label="Rough draft",
         style=discord.TextStyle.paragraph,
@@ -126,9 +130,13 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
             server_name=SERVER_NAME,
         )
 
-        view = ConfirmView(final_message)
+        # Prepend the ping (e.g. @everyone, @here, or a role mention) above the template
+        message_to_post = f"{self.ping_mention}\n{final_message}" if self.ping_mention else final_message
+
+        view = ConfirmView(message_to_post)
+        preview_text = final_message if not self.ping_mention else f"{self.ping_mention} (ping shown as text in this preview)\n\n{final_message}"
         await interaction.followup.send(
-            f"**Preview:**\n\n{final_message}",
+            f"**Preview:**\n\n{preview_text}",
             view=view,
             ephemeral=True,
         )
@@ -141,7 +149,10 @@ class ConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Post to channel", style=discord.ButtonStyle.green, emoji="✅")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.channel.send(self.message)
+        await interaction.channel.send(
+            self.message,
+            allowed_mentions=discord.AllowedMentions(everyone=True, roles=True, users=True),
+        )
         await interaction.response.edit_message(content="✅ Posted!", view=None)
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red, emoji="❌")
@@ -154,8 +165,43 @@ class Announce(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="scannounce", description="Create and post a formatted server announcement")
-    async def announce(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(AnnounceModal())
+    @app_commands.describe(
+        ping="Who should be pinged with this announcement",
+        role="Only needed if you picked 'Specific role' above",
+    )
+    @app_commands.choices(
+        ping=[
+            app_commands.Choice(name="No ping", value="none"),
+            app_commands.Choice(name="@everyone", value="everyone"),
+            app_commands.Choice(name="@here", value="here"),
+            app_commands.Choice(name="Specific role", value="role"),
+        ]
+    )
+    async def announce(
+        self,
+        interaction: discord.Interaction,
+        ping: app_commands.Choice[str] = None,
+        role: discord.Role = None,
+    ):
+        ping_value = ping.value if ping else "none"
+
+        if ping_value == "everyone":
+            ping_mention = "@everyone"
+        elif ping_value == "here":
+            ping_mention = "@here"
+        elif ping_value == "role":
+            if role is None:
+                await interaction.response.send_message(
+                    "⚠️ You picked 'Specific role' but didn't select a role. "
+                    "Run the command again and fill in the `role` option.",
+                    ephemeral=True,
+                )
+                return
+            ping_mention = role.mention
+        else:
+            ping_mention = ""
+
+        await interaction.response.send_modal(AnnounceModal(ping_mention=ping_mention))
 
 
 async def setup(bot: commands.Bot):
