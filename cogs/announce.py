@@ -79,6 +79,26 @@ BODY: <body here>"""
     return title, body
 
 
+def build_message(title, body, ann_number, timestamp, user_name, rank, ping_mention):
+    """Build the final formatted message and its preview text from all the pieces."""
+    final_message = TEMPLATE.format(
+        title=title,
+        body=body,
+        ann_number=ann_number,
+        timestamp=timestamp,
+        user_name=user_name,
+        rank=rank,
+        server_name=SERVER_NAME,
+    )
+    message_to_post = f"{ping_mention}\n{final_message}" if ping_mention else final_message
+    preview_text = (
+        final_message
+        if not ping_mention
+        else f"{ping_mention} (ping shown as text in this preview)\n\n{final_message}"
+    )
+    return message_to_post, preview_text
+
+
 class AnnounceModal(discord.ui.Modal, title="New Announcement"):
     def __init__(self, ping_mention: str = ""):
         super().__init__()
@@ -131,21 +151,25 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
 
         full_ann_number = f"SC-{current_year}-{number_part}"
 
-        final_message = TEMPLATE.format(
+        message_to_post, preview_text = build_message(
             title=title,
             body=body,
             ann_number=full_ann_number,
             timestamp=timestamp,
             user_name=self.user_name.value,
             rank=self.rank.value,
-            server_name=SERVER_NAME,
+            ping_mention=self.ping_mention,
         )
 
-        # Prepend the ping (e.g. @everyone, @here, or a role mention) above the template
-        message_to_post = f"{self.ping_mention}\n{final_message}" if self.ping_mention else final_message
-
-        view = ConfirmView(message_to_post)
-        preview_text = final_message if not self.ping_mention else f"{self.ping_mention} (ping shown as text in this preview)\n\n{final_message}"
+        view = ConfirmView(
+            title=title,
+            body=body,
+            ann_number=full_ann_number,
+            timestamp=timestamp,
+            user_name=self.user_name.value,
+            rank=self.rank.value,
+            ping_mention=self.ping_mention,
+        )
         await interaction.followup.send(
             f"**Preview:**\n\n{preview_text}",
             view=view,
@@ -153,15 +177,72 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
         )
 
 
+class EditModal(discord.ui.Modal, title="Edit Announcement Text"):
+    def __init__(self, parent_view: "ConfirmView"):
+        super().__init__()
+        self.parent_view = parent_view
+
+        # Pre-fill the fields with the current title/body so the user edits, not retypes
+        self.edit_title = discord.ui.TextInput(
+            label="Title",
+            default=parent_view.title,
+            required=True,
+            max_length=100,
+        )
+        self.edit_body = discord.ui.TextInput(
+            label="Body",
+            style=discord.TextStyle.paragraph,
+            default=parent_view.body,
+            required=True,
+            max_length=1800,
+        )
+        self.add_item(self.edit_title)
+        self.add_item(self.edit_body)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # Update the parent view's stored text with the edited version
+        self.parent_view.title = self.edit_title.value
+        self.parent_view.body = self.edit_body.value
+
+        message_to_post, preview_text = build_message(
+            title=self.parent_view.title,
+            body=self.parent_view.body,
+            ann_number=self.parent_view.ann_number,
+            timestamp=self.parent_view.timestamp,
+            user_name=self.parent_view.user_name,
+            rank=self.parent_view.rank,
+            ping_mention=self.parent_view.ping_mention,
+        )
+        self.parent_view.message_to_post = message_to_post
+
+        await interaction.response.edit_message(
+            content=f"**Preview:**\n\n{preview_text}",
+            view=self.parent_view,
+        )
+
+
 class ConfirmView(discord.ui.View):
-    def __init__(self, message: str):
+    def __init__(self, title, body, ann_number, timestamp, user_name, rank, ping_mention):
         super().__init__(timeout=300)
-        self.message = message
+        self.title = title
+        self.body = body
+        self.ann_number = ann_number
+        self.timestamp = timestamp
+        self.user_name = user_name
+        self.rank = rank
+        self.ping_mention = ping_mention
+        self.message_to_post, _ = build_message(
+            title, body, ann_number, timestamp, user_name, rank, ping_mention
+        )
+
+    @discord.ui.button(label="Edit text", style=discord.ButtonStyle.blurple, emoji="✏️")
+    async def edit(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(EditModal(self))
 
     @discord.ui.button(label="Post to channel", style=discord.ButtonStyle.green, emoji="✅")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.channel.send(
-            self.message,
+            self.message_to_post,
             allowed_mentions=discord.AllowedMentions(everyone=True, roles=True, users=True),
         )
         await interaction.response.edit_message(content="✅ Posted!", view=None)
