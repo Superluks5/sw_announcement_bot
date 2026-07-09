@@ -8,6 +8,7 @@ and posts the result to the channel.
 
 import os
 import time
+from datetime import datetime
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -92,9 +93,9 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
     )
     ann_number = discord.ui.TextInput(
         label="Announcement number",
-        placeholder="e.g. SC-2026-001",
+        placeholder="e.g. 1 (this becomes SC-2026-001 automatically)",
         required=True,
-        max_length=50,
+        max_length=10,
     )
     user_name = discord.ui.TextInput(
         label="Your name / username",
@@ -119,11 +120,21 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
             return
 
         timestamp = int(time.time())
+        current_year = datetime.now().year
+
+        # Build the number part (pad to 3 digits if it's a plain number, e.g. "1" -> "001")
+        raw_number = self.ann_number.value.strip()
+        if raw_number.isdigit():
+            number_part = raw_number.zfill(3)
+        else:
+            number_part = raw_number  # fallback if they type something non-numeric
+
+        full_ann_number = f"SC-{current_year}-{number_part}"
 
         final_message = TEMPLATE.format(
             title=title,
             body=body,
-            ann_number=self.ann_number.value,
+            ann_number=full_ann_number,
             timestamp=timestamp,
             user_name=self.user_name.value,
             rank=self.rank.value,
