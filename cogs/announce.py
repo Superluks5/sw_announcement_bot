@@ -7,6 +7,7 @@ and posts the result to the channel.
 """
 
 import os
+import io
 import time
 from datetime import datetime
 import discord
@@ -100,9 +101,11 @@ def build_message(title, body, ann_number, timestamp, user_name, rank, ping_ment
 
 
 class AnnounceModal(discord.ui.Modal, title="New Announcement"):
-    def __init__(self, ping_mention: str = ""):
+    def __init__(self, ping_mention: str = "", image_bytes: bytes = None, image_filename: str = None):
         super().__init__()
         self.ping_mention = ping_mention
+        self.image_bytes = image_bytes
+        self.image_filename = image_filename
 
     draft = discord.ui.TextInput(
         label="Rough draft",
@@ -169,10 +172,14 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
             user_name=self.user_name.value,
             rank=self.rank.value,
             ping_mention=self.ping_mention,
+            image_bytes=self.image_bytes,
+            image_filename=self.image_filename,
         )
+        files = [discord.File(io.BytesIO(self.image_bytes), filename=self.image_filename)] if self.image_bytes else []
         await interaction.followup.send(
             f"**Preview:**\n\n{preview_text}",
             view=view,
+            files=files,
             ephemeral=True,
         )
 
@@ -222,7 +229,7 @@ class EditModal(discord.ui.Modal, title="Edit Announcement Text"):
 
 
 class ConfirmView(discord.ui.View):
-    def __init__(self, title, body, ann_number, timestamp, user_name, rank, ping_mention):
+    def __init__(self, title, body, ann_number, timestamp, user_name, rank, ping_mention, image_bytes=None, image_filename=None):
         super().__init__(timeout=300)
         self.title = title
         self.body = body
@@ -231,6 +238,8 @@ class ConfirmView(discord.ui.View):
         self.user_name = user_name
         self.rank = rank
         self.ping_mention = ping_mention
+        self.image_bytes = image_bytes
+        self.image_filename = image_filename
         self.message_to_post, _ = build_message(
             title, body, ann_number, timestamp, user_name, rank, ping_mention
         )
@@ -241,11 +250,16 @@ class ConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Post to channel", style=discord.ButtonStyle.green, emoji="✅")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        files = []
+        if self.image_bytes:
+            files.append(discord.File(io.BytesIO(self.image_bytes), filename=self.image_filename))
+
         await interaction.channel.send(
             self.message_to_post,
+            files=files,
             allowed_mentions=discord.AllowedMentions(everyone=True, roles=True, users=True),
         )
-        await interaction.response.edit_message(content="✅ Posted!", view=None)
+        await interaction.response.edit_message(content="✅ Posted!", view=None, attachments=[])
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red, emoji="❌")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -260,6 +274,7 @@ class Announce(commands.Cog):
     @app_commands.describe(
         ping="Who should be pinged with this announcement",
         role="Only needed if you picked 'Specific role' above",
+        image="Optional image to attach (screenshot, tutorial graphic, etc.)",
     )
     @app_commands.choices(
         ping=[
@@ -274,6 +289,7 @@ class Announce(commands.Cog):
         interaction: discord.Interaction,
         ping: app_commands.Choice[str] = None,
         role: discord.Role = None,
+        image: discord.Attachment = None,
     ):
         ping_value = ping.value if ping else "none"
 
@@ -293,7 +309,19 @@ class Announce(commands.Cog):
         else:
             ping_mention = ""
 
-        await interaction.response.send_modal(AnnounceModal(ping_mention=ping_mention))
+        image_bytes = None
+        image_filename = None
+        if image is not None:
+            image_bytes = await image.read()
+            image_filename = image.filename
+
+        await interaction.response.send_modal(
+            AnnounceModal(
+                ping_mention=ping_mention,
+                image_bytes=image_bytes,
+                image_filename=image_filename,
+            )
+        )
 
 
 async def setup(bot: commands.Bot):
