@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
+GUILD_ID = 1343273571509604422  # your server - makes commands sync instantly instead of waiting up to an hour
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -24,8 +25,10 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
     try:
-        synced = await bot.tree.sync()
-        print(f"✅ Synced {len(synced)} slash command(s)")
+        guild = discord.Object(id=GUILD_ID)
+        bot.tree.copy_global_to(guild=guild)
+        synced = await bot.tree.sync(guild=guild)
+        print(f"✅ Synced {len(synced)} slash command(s) to your server (instant)")
     except Exception as e:
         print(f"⚠️ Failed to sync commands: {e}")
 
