@@ -1,5 +1,131 @@
 {
-  "items": [],
-  "channel_id": 1343273571509604424,
-  "message_id": 1525103604044664924
+  "items": [
+    {
+      "area": "discord_dev",
+      "status": "done",
+      "text": "Roles & Permissions"
+    },
+    {
+      "area": "discord_dev",
+      "status": "done",
+      "text": "Channels & Permissions"
+    },
+    {
+      "area": "discord_dev",
+      "status": "in_progress",
+      "text": "Bot Setup"
+    },
+    {
+      "area": "discord_dev",
+      "status": "done",
+      "text": "Main Group Binds"
+    },
+    {
+      "area": "discord_dev",
+      "status": "in_progress",
+      "text": "Other Group Binds"
+    },
+    {
+      "area": "discord_dev",
+      "status": "done",
+      "text": "Verification System"
+    },
+    {
+      "area": "discord_dev",
+      "status": "done",
+      "text": "Moderation Logs"
+    },
+    {
+      "area": "discord_dev",
+      "status": "done",
+      "text": "Division Directory"
+    },
+    {
+      "area": "discord_dev",
+      "status": "done",
+      "text": "Public Suggestions"
+    },
+    {
+      "area": "discord_dev",
+      "status": "in_progress",
+      "text": "Application System"
+    },
+    {
+      "area": "game_dev",
+      "status": "in_progress",
+      "text": "Map"
+    },
+    {
+      "area": "game_dev",
+      "status": "in_progress",
+      "text": "Morphs"
+    },
+    {
+      "area": "game_dev",
+      "status": "in_progress",
+      "text": "User Interface"
+    },
+    {
+      "area": "game_dev",
+      "status": "in_progress",
+      "text": "Animations"
+    },
+    {
+      "area": "game_dev",
+      "status": "in_progress",
+      "text": "Blaster & Lightsaber System"
+    },
+    {
+      "area": "game_dev",
+      "status": "in_progress",
+      "text": "Rank System'"
+    },
+    {
+      "area": "game_dev",
+      "status": "planned",
+      "text": "Duty System"
+    },
+    {
+      "area": "game_dev",
+      "status": "planned",
+      "text": "Division Terminals"
+    },
+    {
+      "area": "game_dev",
+      "status": "planned",
+      "text": "Arrest System"
+    },
+    {
+      "area": "game_dev",
+      "status": "planned",
+      "text": "Training Arena"
+    },
+    {
+      "area": "game_dev",
+      "status": "planned",
+      "text": "Patrol Missions"
+    },
+    {
+      "area": "game_dev",
+      "status": "planned",
+      "text": "Imperial Events"
+    },
+    {
+      "area": "game_dev",
+      "status": "planned",
+      "text": "Custom Sound Effects"
+    },
+    {
+      "area": "game_dev",
+      "status": "planned",
+      "text": "Vehicle System"
+    },
+    {
+      "area": "game_dev",
+      "status": "planned",
+      "text": "Data Terminals"
+    }
+  ],
+  "channel_id": 1518234655843815465,
+  "message_id": 1525116656014065715
 }
