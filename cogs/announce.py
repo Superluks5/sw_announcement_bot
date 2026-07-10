@@ -1,9 +1,11 @@
 """
 /announce command
 ------------------
-Opens a popup form (draft, announcement number, name, rank),
-polishes the draft with Groq's free AI API, fills in the template,
-and posts the result to the channel.
+Opens a popup form (draft, announcement number, name, rank), fills in
+the template, and posts the result to the channel. AI polishing (via
+Groq's free API) is on by default but can be turned off with the
+`ai_polish` option - in that case you type the title and body exactly
+as you want them posted, no rewriting.
 """
 
 import os
@@ -101,46 +103,72 @@ def build_message(title, body, ann_number, timestamp, user_name, rank, ping_ment
 
 
 class AnnounceModal(discord.ui.Modal, title="New Announcement"):
-    def __init__(self, ping_mention: str = "", image_bytes: bytes = None, image_filename: str = None):
+    def __init__(self, ping_mention: str = "", image_bytes: bytes = None, image_filename: str = None, ai_polish: bool = True):
         super().__init__()
         self.ping_mention = ping_mention
         self.image_bytes = image_bytes
         self.image_filename = image_filename
+        self.ai_polish = ai_polish
 
-    draft = discord.ui.TextInput(
-        label="Rough draft",
-        style=discord.TextStyle.paragraph,
-        placeholder="e.g. server update, new planets added, maintenance friday 6pm",
-        required=True,
-        max_length=1500,
-    )
-    ann_number = discord.ui.TextInput(
-        label="Announcement number",
-        placeholder="e.g. 1 (this becomes SC-2026-001 automatically)",
-        required=True,
-        max_length=10,
-    )
-    user_name = discord.ui.TextInput(
-        label="Your name / username",
-        required=True,
-        max_length=50,
-    )
-    rank = discord.ui.TextInput(
-        label="Your rank",
-        required=True,
-        max_length=50,
-    )
+        # AI off -> you write the exact title yourself (5 fields total, Discord's modal max)
+        if not ai_polish:
+            self.title_input = discord.ui.TextInput(
+                label="Title",
+                placeholder="e.g. Server Maintenance Friday",
+                required=True,
+                max_length=100,
+            )
+            self.add_item(self.title_input)
+
+        self.draft = discord.ui.TextInput(
+            label="Rough draft" if ai_polish else "Body (posted exactly as typed)",
+            style=discord.TextStyle.paragraph,
+            placeholder=(
+                "e.g. server update, new planets added, maintenance friday 6pm"
+                if ai_polish
+                else "Type the full announcement body exactly as you want it posted"
+            ),
+            required=True,
+            max_length=1500,
+        )
+        self.add_item(self.draft)
+
+        self.ann_number = discord.ui.TextInput(
+            label="Announcement number",
+            placeholder="e.g. 1 (this becomes SC-2026-001 automatically)",
+            required=True,
+            max_length=10,
+        )
+        self.add_item(self.ann_number)
+
+        self.user_name = discord.ui.TextInput(
+            label="Your name / username",
+            required=True,
+            max_length=50,
+        )
+        self.add_item(self.user_name)
+
+        self.rank = discord.ui.TextInput(
+            label="Your rank",
+            required=True,
+            max_length=50,
+        )
+        self.add_item(self.rank)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True, ephemeral=True)
 
-        try:
-            title, body = polish_text(self.draft.value)
-        except Exception as e:
-            await interaction.followup.send(
-                f"❌ Failed to reach the AI service: {e}", ephemeral=True
-            )
-            return
+        if self.ai_polish:
+            try:
+                title, body = polish_text(self.draft.value)
+            except Exception as e:
+                await interaction.followup.send(
+                    f"❌ Failed to reach the AI service: {e}", ephemeral=True
+                )
+                return
+        else:
+            title = self.title_input.value.strip()
+            body = self.draft.value.strip()
 
         timestamp = int(time.time())
         current_year = datetime.now().year
@@ -275,6 +303,7 @@ class Announce(commands.Cog):
         ping="Who should be pinged with this announcement",
         role="Only needed if you picked 'Specific role' above",
         image="Optional image to attach (screenshot, tutorial graphic, etc.)",
+        ai_polish="Rewrite your draft with AI (default: on). Turn off to post your text exactly as typed.",
     )
     @app_commands.choices(
         ping=[
@@ -290,6 +319,7 @@ class Announce(commands.Cog):
         ping: app_commands.Choice[str] = None,
         role: discord.Role = None,
         image: discord.Attachment = None,
+        ai_polish: bool = True,
     ):
         ping_value = ping.value if ping else "none"
 
@@ -320,6 +350,7 @@ class Announce(commands.Cog):
                 ping_mention=ping_mention,
                 image_bytes=image_bytes,
                 image_filename=image_filename,
+                ai_polish=ai_polish,
             )
         )
 
