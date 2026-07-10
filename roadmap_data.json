@@ -5,5 +5,9 @@
   "in_progress": [
     "New planet/2"
   ],
-  "done": []
+  "done": [
+    "all"
+  ],
+  "channel_id": 1343273571509604424,
+  "message_id": 1525102621596061790
 }
