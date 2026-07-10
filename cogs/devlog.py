@@ -47,12 +47,12 @@ def build_devlog_message(version_title, added, fixed, removed, author_name, time
 {code_block}
 ```
 
-**Legend:** `[+]` Added &nbsp; `[0]` Fixed/Edited &nbsp; `[-]` Removed
+**Legend:** `[+]` Added   `[0]` Fixed/Edited   `[-]` Removed
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 🕒 <t:{timestamp}:F>
 — **{author_name}**
-🛰️ {server_name}""".replace("&nbsp;", " ").replace("{server_name}", SERVER_NAME)
+🛰️ {SERVER_NAME}"""
 
     return message
 
