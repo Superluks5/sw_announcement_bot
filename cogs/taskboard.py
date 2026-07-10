@@ -62,10 +62,10 @@ def build_taskboard_embed(data: dict) -> discord.Embed:
 
     for assignee_id, assignee_tasks in by_assignee.items():
         ordered = sorted(assignee_tasks, key=lambda t: STATUS_ORDER.get(t["status"], 99))
-        lines = []
+        lines = [f"<@{assignee_id}>"]
         for i, t in enumerate(ordered):
             lines.append(f"`{i+1}.` {STATUS_LABELS[t['status']]} — {t['text']}")
-        embed.add_field(name=f"👤 <@{assignee_id}>", value="\n".join(lines), inline=False)
+        embed.add_field(name="👤 Assignee", value="\n".join(lines), inline=False)
 
     embed.set_footer(text="Updates automatically when tasks are added or changed.")
     return embed
