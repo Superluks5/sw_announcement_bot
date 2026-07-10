@@ -27,14 +27,14 @@ async def on_ready():
     try:
         guild = discord.Object(id=GUILD_ID)
 
-        # Clear any old GLOBAL commands from previous syncs (this is what caused duplicates)
-        bot.tree.clear_commands(guild=None)
-        await bot.tree.sync()  # pushes the now-empty global list, removing old duplicates
-
-        # Register commands to your server only, for instant updates
+        # Register commands to your server first (while they're still in memory)
         bot.tree.copy_global_to(guild=guild)
         synced = await bot.tree.sync(guild=guild)
         print(f"✅ Synced {len(synced)} slash command(s) to your server (instant)")
+
+        # Now clear any old GLOBAL commands from previous syncs (removes duplicates)
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync()
     except Exception as e:
         print(f"⚠️ Failed to sync commands: {e}")
 
