@@ -1,16 +1,5 @@
 {
-  "items": [
-    {
-      "area": "discord_dev",
-      "status": "in_progress",
-      "text": "Bot setup"
-    },
-    {
-      "area": "game_dev",
-      "status": "in_progress",
-      "text": "New morphs"
-    }
-  ],
+  "items": [],
   "channel_id": 1343273571509604424,
   "message_id": 1525103604044664924
 }
