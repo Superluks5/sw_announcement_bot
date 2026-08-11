@@ -61,7 +61,7 @@ TEMPLATE = """🌌 「 SERVER ANNOUNCEMENT 」 🌌
 
 # Edit this list to match your server's actual divisions/commands.
 # "custom" always gets added automatically as the last dropdown option.
-DIVISIONS = ["Supreme Command", "High Command", "Development Bureau", "Imperial Security Bureau", "Lead Command", "Partnership Director"]
+DIVISIONS = ["Supreme Command", "High Command", "Naval Command", "Intelligence Bureau"]
 DEFAULT_DIVISION = DIVISIONS[0]
 
 
@@ -386,6 +386,7 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
             user_name=self.user_name.value,
             rank=self.rank.value,
             ping_mention=self.ping_mention,
+            division=self.division,
         )
 
         view = ConfirmView(
