@@ -9,9 +9,11 @@ as you want them posted, no rewriting.
 
 Placeholders (work in both the draft and the title/body, with AI
 polish on or off - they always survive AI polish untouched):
-  {#channel-name}       -> a clickable link to that channel, never pings
-  {@role or user name}  -> a clickable tag for that role/user, never pings
-  {invite}               -> a fresh invite link to the channel this is posted in
+  {#channel-name}         -> a clickable link to that channel, never pings
+  {@role or user name}    -> a clickable tag for that role/user, never pings
+  {invite}                 -> a fresh invite link to the channel this is posted in
+  {invite:Partner Name}    -> the saved invite link for a partner server
+                              (must already exist in /partner add)
 
 Only the ping chosen in the command's `ping`/`role` options actually
 sends a notification - anything inserted via a placeholder is silent.
@@ -20,6 +22,7 @@ sends a notification - anything inserted via a placeholder is silent.
 import os
 import re
 import io
+import json
 import time
 from datetime import datetime
 import discord
@@ -57,6 +60,52 @@ TEMPLATE = """🌌 「 SERVER ANNOUNCEMENT 」 🌌
 
 
 MENTION_PLACEHOLDER = re.compile(r"\{(#|@)([^{}]+)\}")
+INVITE_PLACEHOLDER = re.compile(r"\{invite(?::([^{}]+))?\}")
+PARTNER_DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "partner_data.json")
+
+
+def load_partner_links() -> dict:
+    """name (lowercase) -> invite link, reusing the same data /partner add builds."""
+    if not os.path.exists(PARTNER_DATA_FILE):
+        return {}
+    with open(PARTNER_DATA_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return {p["name"].strip().lower(): p["link"] for p in data.get("partners", [])}
+
+
+async def resolve_invites(channel: discord.abc.GuildChannel, text: str) -> tuple[str, list[str]]:
+    """
+    {invite}          -> a fresh invite link to `channel` (this server)
+    {invite:Name}      -> the saved invite link for a partner server from /partner add
+    """
+    unresolved = []
+    partner_links = load_partner_links()
+
+    pieces = []
+    last_end = 0
+    for match in INVITE_PLACEHOLDER.finditer(text):
+        pieces.append(text[last_end:match.start()])
+        name = match.group(1)
+
+        if name:
+            link = partner_links.get(name.strip().lower())
+            if link:
+                pieces.append(link)
+            else:
+                unresolved.append(match.group(0))
+                pieces.append(match.group(0))
+        else:
+            try:
+                invite = await channel.create_invite(max_age=0, max_uses=0, reason="Announcement invite link")
+                pieces.append(invite.url)
+            except discord.HTTPException:
+                unresolved.append(match.group(0))
+                pieces.append(match.group(0))
+
+        last_end = match.end()
+    pieces.append(text[last_end:])
+
+    return "".join(pieces), unresolved
 
 
 async def resolve_placeholders(guild: discord.Guild, channel: discord.abc.GuildChannel, text: str) -> tuple[str, list[str]]:
@@ -65,7 +114,8 @@ async def resolve_placeholders(guild: discord.Guild, channel: discord.abc.GuildC
     ever ping on their own - only the ping chosen in the command options does:
       {#channel-name}       -> a clickable channel link
       {@role or user name}  -> a clickable role/user tag, shown silently
-      {invite}                -> a fresh invite link to `channel`
+      {invite}                -> a fresh invite link to this server
+      {invite:Partner Name}   -> the saved invite link for a partner server (from /partner add)
     Returns (resolved_text, list_of_placeholders_that_could_not_be_matched).
     """
     unresolved = []
@@ -94,13 +144,8 @@ async def resolve_placeholders(guild: discord.Guild, channel: discord.abc.GuildC
         return original
 
     resolved = MENTION_PLACEHOLDER.sub(repl, text)
-
-    if "{invite}" in resolved:
-        try:
-            invite = await channel.create_invite(max_age=0, max_uses=0, reason="Announcement invite link")
-            resolved = resolved.replace("{invite}", invite.url)
-        except discord.HTTPException:
-            unresolved.append("{invite}")
+    resolved, invite_unresolved = await resolve_invites(channel, resolved)
+    unresolved.extend(invite_unresolved)
 
     return resolved, unresolved
 
