@@ -253,9 +253,9 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
             label="Rough draft" if ai_polish else "Body (posted exactly as typed)",
             style=discord.TextStyle.paragraph,
             placeholder=(
-                "e.g. server update, new planets added, maintenance friday 6pm"
+                "e.g. server update, new planets added, use {#verify} {@Cadet} {invite}"
                 if ai_polish
-                else "Type the full announcement body exactly as you want it posted"
+                else "Type the full body. {#chan} {@role} {invite} placeholders work here too"
             ),
             required=True,
             max_length=1500,
@@ -465,6 +465,44 @@ class ConfirmView(discord.ui.View):
         await interaction.response.edit_message(content="❌ Cancelled. Nothing was posted.", view=None)
 
 
+PLACEHOLDER_HELP = (
+    "**Available placeholders** — type these anywhere in your draft/title/body. "
+    "None of them ping (only your `ping`/`role` choice above does), and they "
+    "survive AI polish untouched:\n"
+    "`{#channel-name}` — clickable link to that channel\n"
+    "`{@role or user name}` — clickable tag for that role/user, shown silently\n"
+    "`{invite}` — fresh invite link to this server\n"
+    "`{invite:Partner Name}` — saved invite link for a partner server (must already exist in `/partner add`)"
+)
+
+
+class OpenFormView(discord.ui.View):
+    """Shown before the modal so the placeholder cheat sheet has room to display -
+    modals can't hold a block of help text, only short per-field hints."""
+
+    def __init__(self, ping_mention, ping_value, ping_role, image_bytes, image_filename, ai_polish):
+        super().__init__(timeout=300)
+        self.ping_mention = ping_mention
+        self.ping_value = ping_value
+        self.ping_role = ping_role
+        self.image_bytes = image_bytes
+        self.image_filename = image_filename
+        self.ai_polish = ai_polish
+
+    @discord.ui.button(label="Open announcement form", style=discord.ButtonStyle.blurple, emoji="📝")
+    async def open_form(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(
+            AnnounceModal(
+                ping_mention=self.ping_mention,
+                ping_value=self.ping_value,
+                ping_role=self.ping_role,
+                image_bytes=self.image_bytes,
+                image_filename=self.image_filename,
+                ai_polish=self.ai_polish,
+            )
+        )
+
+
 class Announce(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -516,15 +554,17 @@ class Announce(commands.Cog):
             image_bytes = await image.read()
             image_filename = image.filename
 
-        await interaction.response.send_modal(
-            AnnounceModal(
+        await interaction.response.send_message(
+            PLACEHOLDER_HELP,
+            view=OpenFormView(
                 ping_mention=ping_mention,
                 ping_value=ping_value,
                 ping_role=role,
                 image_bytes=image_bytes,
                 image_filename=image_filename,
                 ai_polish=ai_polish,
-            )
+            ),
+            ephemeral=True,
         )
 
 
