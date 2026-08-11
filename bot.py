@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
-GUILD_ID = 1517264873136980048  # your server - makes commands sync instantly instead of waiting up to an hour
+GUILD_ID = 1535372103593894028  # your server - makes commands sync instantly instead of waiting up to an hour
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)

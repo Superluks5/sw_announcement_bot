@@ -53,7 +53,7 @@ for a Star Wars themed Roblox game community taking place in the Imperial Timeli
 1. Write a short, clear title (no more than 6 words, no emojis, no quotes around it)
 2. Rewrite the body in clear, professional, concise language. Keep it friendly
    but not overly casual. Do not add a greeting like "Hello everyone". Do not
-   add a signature or sign-off. Do not use markdown headers.
+   add a signature or sign-off. Do not use markdown headers. And do not add any emojis. It has to be suitable for a Discord announcement channel. And it has to be suitable for a Star Wars themed Roblox game community. Do not add any extra information that is not in the draft. Do not make up any new information. Keep it concise and to the point. It has to have same meaning as the draft. Do not add any extra information that is not in the draft. Do not make up any new information. Keep it concise and to the point. It has to have same meaning as the draft.
 
 Rough draft:
 \"\"\"
