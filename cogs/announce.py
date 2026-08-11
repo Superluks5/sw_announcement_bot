@@ -108,6 +108,38 @@ async def resolve_invites(channel: discord.abc.GuildChannel, text: str) -> tuple
     return "".join(pieces), unresolved
 
 
+def _find_channel(guild: discord.Guild, name: str):
+    """Exact name match first; falls back to 'contains' so decorated names
+    like 🔑丨verify still match when someone types just {#verify}."""
+    slug = name.lower().replace(" ", "-")
+    exact = discord.utils.find(lambda c: c.name.lower() == slug, guild.text_channels)
+    if exact is not None:
+        return exact
+    return discord.utils.find(lambda c: slug in c.name.lower(), guild.text_channels)
+
+
+def _find_role_or_member(guild: discord.Guild, name: str):
+    """Exact name match first (role, then member); falls back to 'contains'
+    so decorated names like 🔰 Cadet still match when someone types {@Cadet}."""
+    lname = name.lower()
+
+    exact = discord.utils.find(lambda r: r.name.lower() == lname, guild.roles)
+    if exact is not None:
+        return exact
+    exact = discord.utils.find(
+        lambda m: m.display_name.lower() == lname or m.name.lower() == lname, guild.members
+    )
+    if exact is not None:
+        return exact
+
+    partial = discord.utils.find(lambda r: lname in r.name.lower(), guild.roles)
+    if partial is not None:
+        return partial
+    return discord.utils.find(
+        lambda m: lname in m.display_name.lower() or lname in m.name.lower(), guild.members
+    )
+
+
 async def resolve_placeholders(guild: discord.Guild, channel: discord.abc.GuildChannel, text: str) -> tuple[str, list[str]]:
     """
     Turns typed placeholders into real Discord references. None of these
@@ -125,17 +157,9 @@ async def resolve_placeholders(guild: discord.Guild, channel: discord.abc.GuildC
         original = match.group(0)
 
         if kind == "#":
-            target = discord.utils.find(
-                lambda c: c.name.lower() == name.lower().replace(" ", "-"),
-                guild.text_channels,
-            )
+            target = _find_channel(guild, name)
         else:  # "@"
-            target = discord.utils.find(lambda r: r.name.lower() == name.lower(), guild.roles)
-            if target is None:
-                target = discord.utils.find(
-                    lambda m: m.display_name.lower() == name.lower() or m.name.lower() == name.lower(),
-                    guild.members,
-                )
+            target = _find_role_or_member(guild, name)
 
         if target is not None:
             return target.mention
@@ -169,10 +193,10 @@ for a Star Wars themed Roblox game community taking place in the Imperial Timeli
    but not overly casual. Do not add a greeting like "Hello everyone". Do not
    add a signature or sign-off. Do not use markdown headers. And do not add any emojis. It has to be suitable for a Discord announcement channel. And it has to be suitable for a Star Wars themed Roblox game community. Do not add any extra information that is not in the draft. Do not make up any new information. Keep it concise and to the point. It has to have same meaning as the draft. Do not add any extra information that is not in the draft. Do not make up any new information. Keep it concise and to the point. It has to have same meaning as the draft.
 3. The draft may contain placeholders wrapped in curly braces, such as
-   {{#verify}}, {{@Cadet}}, or {{invite}}. Copy any such placeholder into your
-   rewrite EXACTLY as it appears, character for character, keeping it in the
-   same relative place in the sentence. Never translate, reword, remove, or
-   add/remove spaces inside these curly-brace tokens.
+   {{#verify}}, {{@Cadet}}, {{invite}}, or {{invite:Some Server Name}}. Copy any
+   such placeholder into your rewrite EXACTLY as it appears, character for
+   character, keeping it in the same relative place in the sentence. Never
+   translate, reword, remove, or add/remove spaces inside these curly-brace tokens.
 
 Rough draft:
 \"\"\"
