@@ -55,8 +55,14 @@ TEMPLATE = """🌌 「 SERVER ANNOUNCEMENT 」 🌌
 **Signed,**
 👤 **{user_name}**
 🎖️ **Rank:** {rank}
-— **Supreme Command**
+— **{division}**
 🛰️ {server_name}"""
+
+
+# Edit this list to match your server's actual divisions/commands.
+# "custom" always gets added automatically as the last dropdown option.
+DIVISIONS = ["Supreme Command", "High Command", "Development Bureau", "Imperial Security Bureau", "Lead Commander", "Partnership Director"]
+DEFAULT_DIVISION = DIVISIONS[0]
 
 
 MENTION_PLACEHOLDER = re.compile(r"\{(#|@)([^{}]+)\}")
@@ -252,7 +258,7 @@ BODY: <body here>"""
     return title, body
 
 
-def build_message(title, body, ann_number, timestamp, user_name, rank, ping_mention):
+def build_message(title, body, ann_number, timestamp, user_name, rank, ping_mention, division=DEFAULT_DIVISION):
     """Build the final formatted message and its preview text from all the pieces."""
     final_message = TEMPLATE.format(
         title=title,
@@ -261,6 +267,7 @@ def build_message(title, body, ann_number, timestamp, user_name, rank, ping_ment
         timestamp=timestamp,
         user_name=user_name,
         rank=rank,
+        division=division,
         server_name=SERVER_NAME,
     )
     message_to_post = f"{ping_mention}\n{final_message}" if ping_mention else final_message
@@ -281,6 +288,7 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
         image_bytes: bytes = None,
         image_filename: str = None,
         ai_polish: bool = True,
+        division: str = DEFAULT_DIVISION,
     ):
         super().__init__()
         self.ping_mention = ping_mention
@@ -289,6 +297,7 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
         self.image_bytes = image_bytes
         self.image_filename = image_filename
         self.ai_polish = ai_polish
+        self.division = division
 
         # AI off -> you write the exact title yourself (5 fields total, Discord's modal max)
         if not ai_polish:
@@ -389,6 +398,7 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
             ping_mention=self.ping_mention,
             ping_value=self.ping_value,
             ping_role=self.ping_role,
+            division=self.division,
             image_bytes=self.image_bytes,
             image_filename=self.image_filename,
         )
@@ -450,6 +460,7 @@ class EditModal(discord.ui.Modal, title="Edit Announcement Text"):
             user_name=self.parent_view.user_name,
             rank=self.parent_view.rank,
             ping_mention=self.parent_view.ping_mention,
+            division=self.parent_view.division,
         )
         self.parent_view.message_to_post = message_to_post
 
@@ -478,6 +489,7 @@ class ConfirmView(discord.ui.View):
         ping_mention,
         ping_value="none",
         ping_role=None,
+        division=DEFAULT_DIVISION,
         image_bytes=None,
         image_filename=None,
     ):
@@ -491,10 +503,11 @@ class ConfirmView(discord.ui.View):
         self.ping_mention = ping_mention
         self.ping_value = ping_value
         self.ping_role = ping_role
+        self.division = division
         self.image_bytes = image_bytes
         self.image_filename = image_filename
         self.message_to_post, _ = build_message(
-            title, body, ann_number, timestamp, user_name, rank, ping_mention
+            title, body, ann_number, timestamp, user_name, rank, ping_mention, division
         )
 
     @discord.ui.button(label="Edit text", style=discord.ButtonStyle.blurple, emoji="✏️")
@@ -530,9 +543,46 @@ PLACEHOLDER_HELP = (
 )
 
 
+class CustomDivisionModal(discord.ui.Modal, title="Custom Signing Line"):
+    """One-field modal shown only when 'Custom...' is picked in the division
+    dropdown. Submitting it immediately opens the main announcement form -
+    modal-to-modal chaining works because each submission is a fresh interaction."""
+
+    def __init__(self, ping_mention, ping_value, ping_role, image_bytes, image_filename, ai_polish):
+        super().__init__()
+        self.ping_mention = ping_mention
+        self.ping_value = ping_value
+        self.ping_role = ping_role
+        self.image_bytes = image_bytes
+        self.image_filename = image_filename
+        self.ai_polish = ai_polish
+
+        self.division_input = discord.ui.TextInput(
+            label="Signing line",
+            placeholder="e.g. Naval Command, COMPNOR, 501st Legion",
+            required=True,
+            max_length=50,
+        )
+        self.add_item(self.division_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(
+            AnnounceModal(
+                ping_mention=self.ping_mention,
+                ping_value=self.ping_value,
+                ping_role=self.ping_role,
+                image_bytes=self.image_bytes,
+                image_filename=self.image_filename,
+                ai_polish=self.ai_polish,
+                division=self.division_input.value.strip(),
+            )
+        )
+
+
 class OpenFormView(discord.ui.View):
     """Shown before the modal so the placeholder cheat sheet has room to display -
-    modals can't hold a block of help text, only short per-field hints."""
+    modals can't hold a block of help text, only short per-field hints. The
+    signing-line dropdown lives here too, since modals can't contain dropdowns."""
 
     def __init__(self, ping_mention, ping_value, ping_role, image_bytes, image_filename, ai_polish):
         super().__init__(timeout=300)
@@ -542,9 +592,40 @@ class OpenFormView(discord.ui.View):
         self.image_bytes = image_bytes
         self.image_filename = image_filename
         self.ai_polish = ai_polish
+        self.division = DEFAULT_DIVISION
+
+        options = [
+            discord.SelectOption(label=name, default=(name == DEFAULT_DIVISION)) for name in DIVISIONS
+        ]
+        options.append(discord.SelectOption(label="Custom...", value="custom"))
+        self.division_select.options = options
+
+    @discord.ui.select(placeholder=f"Signing line: {DEFAULT_DIVISION}", options=[])
+    async def division_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        self.division = select.values[0]
+        label = "Custom (you'll be asked to type it next)" if self.division == "custom" else self.division
+        for option in select.options:
+            option.default = option.value == self.division
+        await interaction.response.edit_message(
+            content=f"{PLACEHOLDER_HELP}\n\n**Signing line:** {label}",
+            view=self,
+        )
 
     @discord.ui.button(label="Open announcement form", style=discord.ButtonStyle.blurple, emoji="📝")
     async def open_form(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.division == "custom":
+            await interaction.response.send_modal(
+                CustomDivisionModal(
+                    ping_mention=self.ping_mention,
+                    ping_value=self.ping_value,
+                    ping_role=self.ping_role,
+                    image_bytes=self.image_bytes,
+                    image_filename=self.image_filename,
+                    ai_polish=self.ai_polish,
+                )
+            )
+            return
+
         await interaction.response.send_modal(
             AnnounceModal(
                 ping_mention=self.ping_mention,
@@ -553,6 +634,7 @@ class OpenFormView(discord.ui.View):
                 image_bytes=self.image_bytes,
                 image_filename=self.image_filename,
                 ai_polish=self.ai_polish,
+                division=self.division,
             )
         )
 
