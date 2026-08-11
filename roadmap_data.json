@@ -32,7 +32,7 @@
     },
     {
       "area": "discord_dev",
-      "status": "in_progress",
+      "status": "done",
       "text": "Bot Setup"
     },
     {
@@ -47,7 +47,7 @@
     },
     {
       "area": "discord_dev",
-      "status": "in_progress",
+      "status": "done",
       "text": "Application System"
     }
   ],

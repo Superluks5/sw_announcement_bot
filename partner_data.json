@@ -1,5 +1,11 @@
 {
-  "partners": [],
+  "partners": [
+    {
+      "name": "Imperial Affairs",
+      "link": "https://discord.gg/n6zkNrRpcy",
+      "note": "Owned by TGGE"
+    }
+  ],
   "channel_id": 1536028595787407491,
   "message_id": 1536680397805453373
 }
