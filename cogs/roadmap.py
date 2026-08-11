@@ -9,6 +9,7 @@ edited whenever items are added, removed, or cleared.
 Subcommands:
   /roadmap add     - add an item under an area + status
   /roadmap remove  - remove an item by its number (numbers shown in /roadmap show)
+  /roadmap move    - change an item's status (e.g. Planned -> Done) by its number
   /roadmap show    - post (or move) the live roadmap message to this channel
   /roadmap clear   - wipe all items under an area + status
 """
@@ -197,6 +198,51 @@ class Roadmap(commands.Cog):
         note = "" if updated_live else "\n*(No live roadmap message set yet - use `/roadmap show` in a channel first.)*"
         await interaction.response.send_message(
             f"🗑️ Removed from **{AREAS[area.value]}**: {target['text']}{note}", ephemeral=True
+        )
+
+    @roadmap_group.command(name="move", description="Change an item's status, e.g. move it from Planned to Done")
+    @app_commands.describe(
+        area="Which project area the item is in",
+        number="The item number for this area (see /roadmap show)",
+        status="The new status to move it to",
+    )
+    @app_commands.choices(area=area_choices, status=status_choices)
+    async def move(
+        self,
+        interaction: discord.Interaction,
+        area: app_commands.Choice[str],
+        number: int,
+        status: app_commands.Choice[str],
+    ):
+        data = load_data()
+        ordered = get_numbered_items(data, area.value)
+
+        if number < 1 or number > len(ordered):
+            await interaction.response.send_message(
+                f"⚠️ There's no item #{number} in **{AREAS[area.value]}**. "
+                f"Use `/roadmap show` to see current numbers.",
+                ephemeral=True,
+            )
+            return
+
+        target = ordered[number - 1]
+
+        if target["status"] == status.value:
+            await interaction.response.send_message(
+                f"ℹ️ **{target['text']}** is already **{STATUSES[status.value]}**.",
+                ephemeral=True,
+            )
+            return
+
+        old_status = target["status"]
+        target["status"] = status.value
+        save_data(data)
+        updated_live = await self.refresh_live_message(data)
+
+        note = "" if updated_live else "\n*(No live roadmap message set yet - use `/roadmap show` in a channel first.)*"
+        await interaction.response.send_message(
+            f"🔀 Moved **{target['text']}**: {STATUSES[old_status]} → {STATUSES[status.value]}{note}",
+            ephemeral=True,
         )
 
     @roadmap_group.command(name="clear", description="Clear all items in an area (optionally just one status)")
