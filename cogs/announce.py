@@ -6,9 +6,19 @@ the template, and posts the result to the channel. AI polishing (via
 Groq's free API) is on by default but can be turned off with the
 `ai_polish` option - in that case you type the title and body exactly
 as you want them posted, no rewriting.
+
+Placeholders (work in both the draft and the title/body, with AI
+polish on or off - they always survive AI polish untouched):
+  {#channel-name}       -> a clickable link to that channel, never pings
+  {@role or user name}  -> a clickable tag for that role/user, never pings
+  {invite}               -> a fresh invite link to the channel this is posted in
+
+Only the ping chosen in the command's `ping`/`role` options actually
+sends a notification - anything inserted via a placeholder is silent.
 """
 
 import os
+import re
 import io
 import time
 from datetime import datetime
@@ -46,6 +56,65 @@ TEMPLATE = """🌌 「 SERVER ANNOUNCEMENT 」 🌌
 🛰️ {server_name}"""
 
 
+MENTION_PLACEHOLDER = re.compile(r"\{(#|@)([^{}]+)\}")
+
+
+async def resolve_placeholders(guild: discord.Guild, channel: discord.abc.GuildChannel, text: str) -> tuple[str, list[str]]:
+    """
+    Turns typed placeholders into real Discord references. None of these
+    ever ping on their own - only the ping chosen in the command options does:
+      {#channel-name}       -> a clickable channel link
+      {@role or user name}  -> a clickable role/user tag, shown silently
+      {invite}                -> a fresh invite link to `channel`
+    Returns (resolved_text, list_of_placeholders_that_could_not_be_matched).
+    """
+    unresolved = []
+
+    def repl(match: re.Match) -> str:
+        kind, name = match.group(1), match.group(2).strip()
+        original = match.group(0)
+
+        if kind == "#":
+            target = discord.utils.find(
+                lambda c: c.name.lower() == name.lower().replace(" ", "-"),
+                guild.text_channels,
+            )
+        else:  # "@"
+            target = discord.utils.find(lambda r: r.name.lower() == name.lower(), guild.roles)
+            if target is None:
+                target = discord.utils.find(
+                    lambda m: m.display_name.lower() == name.lower() or m.name.lower() == name.lower(),
+                    guild.members,
+                )
+
+        if target is not None:
+            return target.mention
+
+        unresolved.append(original)
+        return original
+
+    resolved = MENTION_PLACEHOLDER.sub(repl, text)
+
+    if "{invite}" in resolved:
+        try:
+            invite = await channel.create_invite(max_age=0, max_uses=0, reason="Announcement invite link")
+            resolved = resolved.replace("{invite}", invite.url)
+        except discord.HTTPException:
+            unresolved.append("{invite}")
+
+    return resolved, unresolved
+
+
+def build_allowed_mentions(ping_value: str, ping_role: discord.Role = None) -> discord.AllowedMentions:
+    """Only the explicitly selected ping target actually notifies anyone.
+    Role/user mentions inserted via {@name} placeholders always stay silent."""
+    if ping_value in ("everyone", "here"):
+        return discord.AllowedMentions(everyone=True, roles=False, users=False)
+    if ping_value == "role" and ping_role:
+        return discord.AllowedMentions(everyone=False, roles=[ping_role], users=False)
+    return discord.AllowedMentions(everyone=False, roles=False, users=False)
+
+
 def polish_text(draft: str) -> tuple[str, str]:
     prompt = f"""You are helping write a professional Discord server announcement
 for a Star Wars themed Roblox game community taking place in the Imperial Timeline. (Roblox Game is in Development) Take the rough draft below and:
@@ -54,6 +123,11 @@ for a Star Wars themed Roblox game community taking place in the Imperial Timeli
 2. Rewrite the body in clear, professional, concise language. Keep it friendly
    but not overly casual. Do not add a greeting like "Hello everyone". Do not
    add a signature or sign-off. Do not use markdown headers. And do not add any emojis. It has to be suitable for a Discord announcement channel. And it has to be suitable for a Star Wars themed Roblox game community. Do not add any extra information that is not in the draft. Do not make up any new information. Keep it concise and to the point. It has to have same meaning as the draft. Do not add any extra information that is not in the draft. Do not make up any new information. Keep it concise and to the point. It has to have same meaning as the draft.
+3. The draft may contain placeholders wrapped in curly braces, such as
+   {{#verify}}, {{@Cadet}}, or {{invite}}. Copy any such placeholder into your
+   rewrite EXACTLY as it appears, character for character, keeping it in the
+   same relative place in the sentence. Never translate, reword, remove, or
+   add/remove spaces inside these curly-brace tokens.
 
 Rough draft:
 \"\"\"
@@ -103,9 +177,19 @@ def build_message(title, body, ann_number, timestamp, user_name, rank, ping_ment
 
 
 class AnnounceModal(discord.ui.Modal, title="New Announcement"):
-    def __init__(self, ping_mention: str = "", image_bytes: bytes = None, image_filename: str = None, ai_polish: bool = True):
+    def __init__(
+        self,
+        ping_mention: str = "",
+        ping_value: str = "none",
+        ping_role: discord.Role = None,
+        image_bytes: bytes = None,
+        image_filename: str = None,
+        ai_polish: bool = True,
+    ):
         super().__init__()
         self.ping_mention = ping_mention
+        self.ping_value = ping_value
+        self.ping_role = ping_role
         self.image_bytes = image_bytes
         self.image_filename = image_filename
         self.ai_polish = ai_polish
@@ -170,6 +254,10 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
             title = self.title_input.value.strip()
             body = self.draft.value.strip()
 
+        title, unresolved_title = await resolve_placeholders(interaction.guild, interaction.channel, title)
+        body, unresolved_body = await resolve_placeholders(interaction.guild, interaction.channel, body)
+        unresolved = unresolved_title + unresolved_body
+
         timestamp = int(time.time())
         current_year = datetime.now().year
 
@@ -200,12 +288,20 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
             user_name=self.user_name.value,
             rank=self.rank.value,
             ping_mention=self.ping_mention,
+            ping_value=self.ping_value,
+            ping_role=self.ping_role,
             image_bytes=self.image_bytes,
             image_filename=self.image_filename,
         )
         files = [discord.File(io.BytesIO(self.image_bytes), filename=self.image_filename)] if self.image_bytes else []
+        warning = (
+            f"\n\n⚠️ Couldn't match: {', '.join(unresolved)} — check the spelling, "
+            f"or that it exists in this server."
+            if unresolved
+            else ""
+        )
         await interaction.followup.send(
-            f"**Preview:**\n\n{preview_text}",
+            f"**Preview:**\n\n{preview_text}{warning}",
             view=view,
             files=files,
             ephemeral=True,
@@ -235,9 +331,17 @@ class EditModal(discord.ui.Modal, title="Edit Announcement Text"):
         self.add_item(self.edit_body)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Update the parent view's stored text with the edited version
-        self.parent_view.title = self.edit_title.value
-        self.parent_view.body = self.edit_body.value
+        resolved_title, unresolved_title = await resolve_placeholders(
+            interaction.guild, interaction.channel, self.edit_title.value
+        )
+        resolved_body, unresolved_body = await resolve_placeholders(
+            interaction.guild, interaction.channel, self.edit_body.value
+        )
+        unresolved = unresolved_title + unresolved_body
+
+        # Update the parent view's stored text with the edited (and resolved) version
+        self.parent_view.title = resolved_title
+        self.parent_view.body = resolved_body
 
         message_to_post, preview_text = build_message(
             title=self.parent_view.title,
@@ -255,9 +359,29 @@ class EditModal(discord.ui.Modal, title="Edit Announcement Text"):
             view=self.parent_view,
         )
 
+        if unresolved:
+            await interaction.followup.send(
+                f"⚠️ Couldn't match: {', '.join(unresolved)} — check the spelling, "
+                f"or that it exists in this server.",
+                ephemeral=True,
+            )
+
 
 class ConfirmView(discord.ui.View):
-    def __init__(self, title, body, ann_number, timestamp, user_name, rank, ping_mention, image_bytes=None, image_filename=None):
+    def __init__(
+        self,
+        title,
+        body,
+        ann_number,
+        timestamp,
+        user_name,
+        rank,
+        ping_mention,
+        ping_value="none",
+        ping_role=None,
+        image_bytes=None,
+        image_filename=None,
+    ):
         super().__init__(timeout=300)
         self.title = title
         self.body = body
@@ -266,6 +390,8 @@ class ConfirmView(discord.ui.View):
         self.user_name = user_name
         self.rank = rank
         self.ping_mention = ping_mention
+        self.ping_value = ping_value
+        self.ping_role = ping_role
         self.image_bytes = image_bytes
         self.image_filename = image_filename
         self.message_to_post, _ = build_message(
@@ -285,7 +411,7 @@ class ConfirmView(discord.ui.View):
         await interaction.channel.send(
             self.message_to_post,
             files=files,
-            allowed_mentions=discord.AllowedMentions(everyone=True, roles=True, users=True),
+            allowed_mentions=build_allowed_mentions(self.ping_value, self.ping_role),
         )
         await interaction.response.edit_message(content="✅ Posted!", view=None, attachments=[])
 
@@ -348,6 +474,8 @@ class Announce(commands.Cog):
         await interaction.response.send_modal(
             AnnounceModal(
                 ping_mention=ping_mention,
+                ping_value=ping_value,
+                ping_role=role,
                 image_bytes=image_bytes,
                 image_filename=image_filename,
                 ai_polish=ai_polish,
