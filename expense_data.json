@@ -1,3 +1,17 @@
 {
-  "expenses": []
+  "expenses": [
+    {
+      "amount": 10.0,
+      "description": "test",
+      "payer_id": 1524854102339621116,
+      "payer_name": "The Grand Galactic Empire",
+      "participant_ids": [
+        1524854102339621116
+      ],
+      "participant_names": [
+        "The Grand Galactic Empire"
+      ],
+      "date": "2026-08-12"
+    }
+  ]
 }

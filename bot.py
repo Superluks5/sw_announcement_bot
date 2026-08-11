@@ -18,6 +18,7 @@ DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 GUILD_ID = 1535372103593894028  # your server - makes commands sync instantly instead of waiting up to an hour
 
 intents = discord.Intents.default()
+intents.members = True  # required so {@name} placeholders can find users, not just roles
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 

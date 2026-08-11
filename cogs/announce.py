@@ -184,6 +184,33 @@ def build_allowed_mentions(ping_value: str, ping_role: discord.Role = None) -> d
     return discord.AllowedMentions(everyone=False, roles=False, users=False)
 
 
+PLACEHOLDER_TOKEN_PATTERN = re.compile(r"\{(?:#|@)[^{}]+\}|\{invite(?::[^{}]+)?\}")
+
+
+def tokenize_placeholders(text: str) -> tuple[str, dict[str, str]]:
+    """
+    Swaps every {#...}/{@...}/{invite...} placeholder for an opaque
+    [[PLACEHOLDER_n]] token before the text is sent to the AI. The AI can't
+    "helpfully" auto-correct a name (e.g. {@Superluks} -> {@Superluks5}) if
+    it never sees the real placeholder text in the first place.
+    Returns (text_with_tokens, {token: original_placeholder_text}).
+    """
+    mapping: dict[str, str] = {}
+
+    def repl(match: re.Match) -> str:
+        token = f"[[PLACEHOLDER_{len(mapping)}]]"
+        mapping[token] = match.group(0)
+        return token
+
+    return PLACEHOLDER_TOKEN_PATTERN.sub(repl, text), mapping
+
+
+def restore_placeholders(text: str, mapping: dict[str, str]) -> str:
+    for token, original in mapping.items():
+        text = text.replace(token, original)
+    return text
+
+
 def polish_text(draft: str) -> tuple[str, str]:
     prompt = f"""You are helping write a professional Discord server announcement
 for a Star Wars themed Roblox game community taking place in the Imperial Timeline. (Roblox Game is in Development) Take the rough draft below and:
@@ -192,11 +219,11 @@ for a Star Wars themed Roblox game community taking place in the Imperial Timeli
 2. Rewrite the body in clear, professional, concise language. Keep it friendly
    but not overly casual. Do not add a greeting like "Hello everyone". Do not
    add a signature or sign-off. Do not use markdown headers. And do not add any emojis. It has to be suitable for a Discord announcement channel. And it has to be suitable for a Star Wars themed Roblox game community. Do not add any extra information that is not in the draft. Do not make up any new information. Keep it concise and to the point. It has to have same meaning as the draft. Do not add any extra information that is not in the draft. Do not make up any new information. Keep it concise and to the point. It has to have same meaning as the draft.
-3. The draft may contain placeholders wrapped in curly braces, such as
-   {{#verify}}, {{@Cadet}}, {{invite}}, or {{invite:Some Server Name}}. Copy any
-   such placeholder into your rewrite EXACTLY as it appears, character for
-   character, keeping it in the same relative place in the sentence. Never
-   translate, reword, remove, or add/remove spaces inside these curly-brace tokens.
+3. The draft may contain tokens that look like [[PLACEHOLDER_0]],
+   [[PLACEHOLDER_1]], etc. Copy any such token into your rewrite EXACTLY as it
+   appears, character for character, keeping it in the same relative place in
+   the sentence. Never translate, reword, remove, "fix", or alter these
+   tokens in any way - not even the numbers inside them.
 
 Rough draft:
 \"\"\"
@@ -313,7 +340,10 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
 
         if self.ai_polish:
             try:
-                title, body = polish_text(self.draft.value)
+                tokenized_draft, token_map = tokenize_placeholders(self.draft.value)
+                title, body = polish_text(tokenized_draft)
+                title = restore_placeholders(title, token_map)
+                body = restore_placeholders(body, token_map)
             except Exception as e:
                 await interaction.followup.send(
                     f"❌ Failed to reach the AI service: {e}", ephemeral=True
