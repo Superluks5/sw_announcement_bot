@@ -13,12 +13,16 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from permissions import is_command_allowed
+from permissions import is_command_allowed, load_config
 
 load_dotenv()
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
-GUILD_ID = 1535372103593894028  # your server - makes commands sync instantly instead of waiting up to an hour
+
+# Defaults to your real server. Add GUILD_ID=your_test_server_id to a
+# local .env (never commit it) to point a dev/test bot at a different
+# server without touching this file.
+GUILD_ID = int(os.environ.get("GUILD_ID", 1535372103593894028))
 
 
 class PermissionedTree(app_commands.CommandTree):
@@ -42,6 +46,10 @@ bot = commands.Bot(command_prefix="!", intents=intents, tree_cls=PermissionedTre
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
+
+    load_config()  # creates permissions_config.json now if it doesn't exist yet
+    print("✅ permissions_config.json ready")
+
     try:
         guild = discord.Object(id=GUILD_ID)
 

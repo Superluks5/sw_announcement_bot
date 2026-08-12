@@ -48,7 +48,7 @@ ADMIN_BYPASS = True
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "permissions_config.json")
 
 
-def _load_config() -> dict[str, list[int]]:
+def load_config() -> dict[str, list[int]]:
     if not os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump({}, f, indent=2)
@@ -69,7 +69,7 @@ def is_command_allowed(interaction: discord.Interaction) -> bool:
     if ADMIN_BYPASS and isinstance(interaction.user, discord.Member) and interaction.user.guild_permissions.administrator:
         return True
 
-    command_permissions = _load_config()
+    command_permissions = load_config()
     allowed_role_ids = command_permissions.get(interaction.command.qualified_name)
     if allowed_role_ids is None:
         return True  # not listed - open to everyone
