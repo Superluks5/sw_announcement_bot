@@ -4,3 +4,7 @@ __pycache__/
 
 # Live bot data - created at runtime, must never be overwritten by a git pull
 *_data.json
+
+# Per-machine role permission config - different role IDs on your test
+# server vs your real server, must never sync between them
+permissions_config.json
