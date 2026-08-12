@@ -61,7 +61,7 @@ TEMPLATE = """🌌 「 SERVER ANNOUNCEMENT 」 🌌
 
 # Edit this list to match your server's actual divisions/commands.
 # "custom" always gets added automatically as the last dropdown option.
-DIVISIONS = ["Supreme Command", "Lead Command", "High Command", "Development Bureau", "Imperial Security Bureau", "Partnership Bureau"]
+DIVISIONS = ["Supreme Command", "Lead Command", "High Command", "Development Bureau", "Imperial Security Bureau", "Partnership Bureau", "Management Team"]
 DEFAULT_DIVISION = DIVISIONS[0]
 
 
