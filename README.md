@@ -1,4 +1,4 @@
-# Star Wars Server Announcement Bot
+# Star Wars Server Announcement Bot by Superluks5
 
 A Discord bot with a `/announce` slash command. Anyone with permission can
 type `/announce`, fill in a short form, and the bot polishes the text with
