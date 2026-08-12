@@ -9,17 +9,34 @@ just drop a new .py file in cogs/ - you don't need to edit this file.
 import os
 import asyncio
 import discord
+from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
+
+from permissions import is_command_allowed
 
 load_dotenv()
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 GUILD_ID = 1535372103593894028  # your server - makes commands sync instantly instead of waiting up to an hour
 
+
+class PermissionedTree(app_commands.CommandTree):
+    """Runs before every single slash command (including subcommands) -
+    see permissions.py to control who can use what."""
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if is_command_allowed(interaction):
+            return True
+        await interaction.response.send_message(
+            "🚫 You don't have permission to use this command.", ephemeral=True
+        )
+        return False
+
+
 intents = discord.Intents.default()
 intents.members = True  # required so {@name} placeholders can find users, not just roles
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents, tree_cls=PermissionedTree)
 
 
 @bot.event
