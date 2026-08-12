@@ -1,4 +1,6 @@
 .env
 __pycache__/
 *.pyc
-.json
+
+# Live bot data - created at runtime, must never be overwritten by a git pull
+*_data.json
