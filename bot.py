@@ -8,7 +8,9 @@ just drop a new .py file in cogs/ - you don't need to edit this file.
 
 import os
 import asyncio
+import traceback
 import discord
+import aiohttp
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -24,6 +26,23 @@ DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 # server without touching this file.
 GUILD_ID = int(os.environ.get("GUILD_ID", 1535372103593894028))
 
+# Optional - add LOG_WEBHOOK_URL=... to your .env to get bot startup/error
+# notifications posted to a private log channel. Leave unset to disable.
+LOG_WEBHOOK_URL = os.environ.get("LOG_WEBHOOK_URL")
+
+
+async def send_log(content: str):
+    """Posts a message to the log webhook, if one is configured. Safe to call
+    even if LOG_WEBHOOK_URL is unset - it just does nothing in that case."""
+    if not LOG_WEBHOOK_URL:
+        return
+    try:
+        async with aiohttp.ClientSession() as session:
+            webhook = discord.Webhook.from_url(LOG_WEBHOOK_URL, session=session)
+            await webhook.send(content[:2000], username="Bot Logs")
+    except Exception as e:
+        print(f"⚠️ Failed to send log webhook: {e}")
+
 
 class PermissionedTree(app_commands.CommandTree):
     """Runs before every single slash command (including subcommands) -
@@ -37,6 +56,16 @@ class PermissionedTree(app_commands.CommandTree):
         )
         return False
 
+    async def on_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        # Permission denials are already handled above and are expected, not real errors
+        if isinstance(error, app_commands.CheckFailure):
+            return
+
+        command_name = interaction.command.qualified_name if interaction.command else "unknown"
+        tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+        print(f"⚠️ Error in /{command_name}:\n{tb}")
+        await send_log(f"⚠️ **Error in `/{command_name}`** (used by {interaction.user})\n```{tb[-1800:]}```")
+
 
 intents = discord.Intents.default()
 intents.members = True  # required so {@name} placeholders can find users, not just roles
@@ -46,6 +75,7 @@ bot = commands.Bot(command_prefix="!", intents=intents, tree_cls=PermissionedTre
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
+    await send_log(f"✅ **{bot.user}** is now online.")
 
     load_config()  # creates permissions_config.json now if it doesn't exist yet
     print("✅ permissions_config.json ready")
