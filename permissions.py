@@ -37,15 +37,26 @@ EXAMPLE permissions_config.json:
 
 If permissions_config.json doesn't exist yet, it's auto-created empty
 (everyone can use everything) the first time the bot runs.
+
+command_toggles.json (same folder, also gitignored) controls fully
+enabling/disabling a command - {"command_name": false} disables it for
+EVERYONE including admins. Absent = enabled (default).
+
+usage_data.json (same folder, gitignored) is a running count of how many
+times each command has been successfully used - read by the dashboard's
+analytics page. Purely informational, never affects permissions.
 """
 
 import os
 import json
+import time
 import discord
 
 ADMIN_BYPASS = True
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "permissions_config.json")
+TOGGLES_FILE = os.path.join(os.path.dirname(__file__), "command_toggles.json")
+USAGE_FILE = os.path.join(os.path.dirname(__file__), "usage_data.json")
 
 
 def load_config() -> dict[str, list[int]]:
@@ -62,20 +73,64 @@ def load_config() -> dict[str, list[int]]:
     return {command: [int(role_id) for role_id in role_ids] for command, role_ids in raw.items()}
 
 
+def load_toggles() -> dict[str, bool]:
+    if not os.path.exists(TOGGLES_FILE):
+        with open(TOGGLES_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f, indent=2)
+        return {}
+    with open(TOGGLES_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def is_command_enabled(command_name: str) -> bool:
+    return load_toggles().get(command_name, True)
+
+
+def record_usage(command_name: str):
+    """Best-effort usage counter for the dashboard's analytics page."""
+    try:
+        data = {}
+        if os.path.exists(USAGE_FILE):
+            with open(USAGE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        entry = data.get(command_name, {"count": 0, "last_used": None})
+        entry["count"] += 1
+        entry["last_used"] = int(time.time())
+        data[command_name] = entry
+        with open(USAGE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"⚠️ Failed to record command usage: {e}")
+
+
 def is_command_allowed(interaction: discord.Interaction) -> bool:
     if interaction.command is None:
         return True
 
-    if ADMIN_BYPASS and isinstance(interaction.user, discord.Member) and interaction.user.guild_permissions.administrator:
+    command_name = interaction.command.qualified_name
+    is_admin = ADMIN_BYPASS and isinstance(interaction.user, discord.Member) and interaction.user.guild_permissions.administrator
+
+    # A fully disabled command blocks everyone, including admins - that's
+    # the point of a hard disable (e.g. a broken command someone turned off).
+    if not is_command_enabled(command_name):
+        return False
+
+    if is_admin:
+        record_usage(command_name)
         return True
 
     command_permissions = load_config()
-    allowed_role_ids = command_permissions.get(interaction.command.qualified_name)
+    allowed_role_ids = command_permissions.get(command_name)
+
     if allowed_role_ids is None:
+        record_usage(command_name)
         return True  # not listed - open to everyone
 
     if not isinstance(interaction.user, discord.Member):
         return False
 
     user_role_ids = {r.id for r in interaction.user.roles}
-    return bool(user_role_ids.intersection(allowed_role_ids))
+    allowed = bool(user_role_ids.intersection(allowed_role_ids))
+    if allowed:
+        record_usage(command_name)
+    return allowed

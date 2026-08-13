@@ -1,14 +1,14 @@
 """
 Bot Dashboard
 ------------------------
-Public web dashboard for managing the bot - login with Discord (restricted
-to an allowlist of user IDs), edit command permissions, manage the roadmap,
-and (over time) more modules. See README notes at the bottom for deployment.
+Public landing page -> Discord OAuth login (allowlisted user IDs) ->
+dashboard home (usage analytics + module cards) -> per-module pages.
 """
 
 import os
 import json
 import time
+from datetime import datetime
 from functools import wraps
 from urllib.parse import urlencode
 
@@ -24,43 +24,44 @@ app.secret_key = os.environ.get("DASHBOARD_SECRET_KEY", "change-me-in-env")
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 GUILD_ID = os.environ.get("GUILD_ID", "1535372103593894028")
+BOT_NAME = os.environ.get("BOT_NAME", "Imperial Command System")
 
 DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET")
 DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI", "http://localhost:5000/callback")
 
-# Comma-separated Discord user IDs allowed to log in - add every trusted
-# admin's ID here, not just your own.
 ALLOWED_USER_IDS = {
     uid.strip() for uid in os.environ.get("DASHBOARD_ALLOWED_USER_IDS", "").split(",") if uid.strip()
 }
 
 PERMISSIONS_FILE = os.path.join(BASE_DIR, "permissions_config.json")
+TOGGLES_FILE = os.path.join(BASE_DIR, "command_toggles.json")
+USAGE_FILE = os.path.join(BASE_DIR, "usage_data.json")
 ROADMAP_FILE = os.path.join(BASE_DIR, "roadmap_data.json")
 
-# Every command in the bot - keep this in sync when new commands are added.
-ALL_COMMANDS = [
-    "archive history", "archive pins", "archive setchannel",
-    "blocker add", "blocker clear", "blocker resolve", "blocker show",
-    "broadcast cancel", "broadcast list", "broadcast schedule",
-    "devlog", "duel",
-    "expense add", "expense clear", "expense remove", "expense show",
-    "holonet", "imperial-id", "inactivity",
-    "partner add", "partner clear", "partner remove", "partner show",
-    "promote", "rank link", "rank links", "rank unlink",
-    "revenue clear", "revenue log", "revenue remove", "revenue show",
-    "roadmap add", "roadmap clear", "roadmap move", "roadmap remove", "roadmap show",
-    "scannounce", "shoutout",
-    "taskboard add", "taskboard clear", "taskboard mytasks", "taskboard remove",
-    "taskboard show", "taskboard update",
-    "team add", "team clear", "team remove", "team show",
-    "testflight add", "testflight clear", "testflight remove", "testflight show", "testflight update",
-    "timezone",
-    "versionlog clear", "versionlog history", "versionlog set", "versionlog show",
-    "wanted",
-]
+# Every command in the bot, grouped by module for the permissions page.
+# Keep in sync when new commands/cogs are added.
+COMMAND_GROUPS = {
+    "announcements": ["scannounce"],
+    "archive": ["archive history", "archive pins", "archive setchannel"],
+    "blocker": ["blocker add", "blocker clear", "blocker resolve", "blocker show"],
+    "broadcast": ["broadcast cancel", "broadcast list", "broadcast schedule"],
+    "devlog": ["devlog"],
+    "fun": ["duel", "holonet", "imperial-id", "wanted", "shoutout"],
+    "expense": ["expense add", "expense clear", "expense remove", "expense show"],
+    "inactivity": ["inactivity"],
+    "partner": ["partner add", "partner clear", "partner remove", "partner show"],
+    "promote & rank": ["promote", "rank link", "rank links", "rank unlink"],
+    "revenue": ["revenue clear", "revenue log", "revenue remove", "revenue show"],
+    "roadmap": ["roadmap add", "roadmap clear", "roadmap move", "roadmap remove", "roadmap show"],
+    "taskboard": ["taskboard add", "taskboard clear", "taskboard mytasks", "taskboard remove", "taskboard show", "taskboard update"],
+    "team": ["team add", "team clear", "team remove", "team show"],
+    "testflight": ["testflight add", "testflight clear", "testflight remove", "testflight show", "testflight update"],
+    "misc": ["timezone"],
+    "versionlog": ["versionlog clear", "versionlog history", "versionlog set", "versionlog show"],
+}
+ALL_COMMANDS = [cmd for group in COMMAND_GROUPS.values() for cmd in group]
 
-# Must match cogs/roadmap.py exactly - edit both places if you change these
 ROADMAP_AREAS = {
     "discord_dev": "🤖 Discord Development",
     "game_dev": "🎮 Game Development",
@@ -75,8 +76,6 @@ ROADMAP_STATUSES = {
 _roles_cache = {"data": None, "fetched_at": 0}
 
 
-# ---------- shared helpers ----------
-
 def load_json(path: str, default):
     if not os.path.exists(path):
         return default
@@ -90,13 +89,10 @@ def save_json(path: str, data):
 
 
 def fetch_guild_roles() -> list[dict]:
-    """Roles for GUILD_ID, fetched using the bot's own token. Cached for 60s."""
     if _roles_cache["data"] is not None and (time.time() - _roles_cache["fetched_at"]) < 60:
         return _roles_cache["data"]
-
     if not DISCORD_TOKEN:
         return []
-
     try:
         resp = requests.get(
             f"https://discord.com/api/v10/guilds/{GUILD_ID}/roles",
@@ -123,13 +119,19 @@ def login_required(view):
     return wrapped
 
 
+# ---------- public landing ----------
+
+@app.route("/")
+def landing():
+    return render_template("landing.html", bot_name=BOT_NAME)
+
+
 # ---------- auth ----------
 
 @app.route("/login")
 def login():
     if not DISCORD_CLIENT_ID:
         return "DISCORD_CLIENT_ID isn't set in .env yet - see setup notes.", 500
-
     params = {
         "client_id": DISCORD_CLIENT_ID,
         "redirect_uri": DISCORD_REDIRECT_URI,
@@ -164,7 +166,6 @@ def callback():
         return redirect(url_for("login"))
 
     access_token = token_resp.json()["access_token"]
-
     user_resp = requests.get(
         "https://discord.com/api/users/@me",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -179,53 +180,83 @@ def callback():
 
     session["user_id"] = user_id
     session["username"] = user.get("username", "Unknown")
-    return redirect(url_for("permissions_page"))
+    return redirect(url_for("dashboard_home"))
 
 
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("login"))
+    return redirect(url_for("landing"))
 
 
-@app.route("/")
+# ---------- dashboard home ----------
+
+@app.route("/dashboard")
 @login_required
-def index():
-    return redirect(url_for("permissions_page"))
+def dashboard_home():
+    usage = load_json(USAGE_FILE, {})
+    sorted_usage = sorted(usage.items(), key=lambda kv: kv[1]["count"], reverse=True)[:10]
+
+    top_commands = []
+    for cmd, stats in sorted_usage:
+        last_used_display = "-"
+        if stats.get("last_used"):
+            last_used_display = datetime.fromtimestamp(stats["last_used"]).strftime("%b %d, %H:%M")
+        top_commands.append((cmd, {**stats, "last_used_display": last_used_display}))
+
+    return render_template(
+        "dashboard_home.html",
+        username=session.get("username"),
+        active_tab="home",
+        top_commands=top_commands,
+    )
 
 
-# ---------- permissions tab ----------
+# ---------- permissions ----------
 
 @app.route("/permissions", methods=["GET", "POST"])
 @login_required
 def permissions_page():
     data = load_json(PERMISSIONS_FILE, {})
+    toggles = load_json(TOGGLES_FILE, {})
     roles = fetch_guild_roles()
 
     if request.method == "POST":
         new_data = {}
+        new_toggles = {}
         for command in ALL_COMMANDS:
-            field_name = f"roles_{command.replace(' ', '_')}"
+            field_name = f"roles_{command.replace(' ', '_').replace('-', '_')}"
+            enabled_field = f"enabled_{command.replace(' ', '_').replace('-', '_')}"
+
             selected = request.form.getlist(field_name)
             if selected:
                 new_data[command] = selected
 
+            new_toggles[command] = enabled_field in request.form
+
         save_json(PERMISSIONS_FILE, new_data)
+        save_json(TOGGLES_FILE, new_toggles)
         flash("Saved. Restart the bot for changes to take effect (sudo systemctl restart swbot).", "success")
         return redirect(url_for("permissions_page"))
 
-    rows = []
-    for command in ALL_COMMANDS:
-        current_ids = set(data.get(command, []))
-        rows.append({
-            "command": command,
-            "field_name": f"roles_{command.replace(' ', '_')}",
-            "current_ids": current_ids,
-        })
+    groups = {}
+    for group_name, commands in COMMAND_GROUPS.items():
+        rows = []
+        for command in commands:
+            field_name = f"roles_{command.replace(' ', '_').replace('-', '_')}"
+            enabled_field = f"enabled_{command.replace(' ', '_').replace('-', '_')}"
+            rows.append({
+                "command": command,
+                "field_name": field_name,
+                "enabled_field": enabled_field,
+                "current_ids": set(data.get(command, [])),
+                "enabled": toggles.get(command, True),
+            })
+        groups[group_name] = rows
 
     return render_template(
         "permissions.html",
-        rows=rows,
+        groups=groups,
         roles=roles,
         username=session.get("username"),
         active_tab="permissions",
@@ -233,7 +264,7 @@ def permissions_page():
     )
 
 
-# ---------- roadmap tab ----------
+# ---------- roadmap ----------
 
 def load_roadmap() -> dict:
     return load_json(ROADMAP_FILE, {"items": [], "channel_id": None, "message_id": None})
@@ -271,7 +302,7 @@ def roadmap_add():
         "text": request.form["text"].strip(),
     })
     save_roadmap(data)
-    flash("Added. Run /roadmap show in Discord (or wait for next auto-refresh) to update the live message.", "success")
+    flash("Added.", "success")
     return redirect(url_for("roadmap_page"))
 
 
@@ -298,7 +329,4 @@ def roadmap_remove(item_id):
 
 
 if __name__ == "__main__":
-    # Behind Nginx + Certbot in production (see setup notes) - Nginx forwards
-    # to this on localhost only, so binding 127.0.0.1 here is correct and
-    # safer even in the public setup.
     app.run(host="127.0.0.1", port=5000, debug=False)

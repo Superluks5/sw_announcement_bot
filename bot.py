@@ -15,7 +15,7 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from permissions import is_command_allowed, load_config
+from permissions import is_command_allowed, load_config, is_command_enabled, load_toggles
 
 load_dotenv()
 
@@ -51,9 +51,16 @@ class PermissionedTree(app_commands.CommandTree):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if is_command_allowed(interaction):
             return True
-        await interaction.response.send_message(
-            "🚫 You don't have permission to use this command.", ephemeral=True
-        )
+
+        command_name = interaction.command.qualified_name if interaction.command else None
+        if command_name and not is_command_enabled(command_name):
+            await interaction.response.send_message(
+                "🚫 This command is currently disabled.", ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                "🚫 You don't have permission to use this command.", ephemeral=True
+            )
         return False
 
     async def on_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
@@ -78,6 +85,7 @@ async def on_ready():
     await send_log(f"✅ **{bot.user}** is now online.")
 
     load_config()  # creates permissions_config.json now if it doesn't exist yet
+    load_toggles()  # creates command_toggles.json now if it doesn't exist yet
     print("✅ permissions_config.json ready")
 
     try:

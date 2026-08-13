@@ -4,39 +4,66 @@
         <div class="warn">⚠️ Couldn't fetch roles from Discord - check DISCORD_TOKEN and GUILD_ID in .env. Showing empty role list for now.</div>
         {% endif %}
 
-        <p class="hint">Check every role allowed to use each command. Nothing checked = open to everyone. Admins can always use every command regardless.</p>
+        <p class="hint">
+            Toggle a command off to disable it for everyone (even admins). For enabled commands,
+            pick which roles can use it - none selected means everyone can. Admins always bypass role restrictions.
+        </p>
+
+        <input type="text" id="filterBox" placeholder="Filter commands..." style="width: 100%; margin-bottom: 16px; padding: 10px;" oninput="filterGroups()">
 
         <form method="POST">
-            <div style="max-height: 75vh; overflow-y: auto; border-radius: 8px;">
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 22%">Command</th>
-                        <th>Allowed Roles</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in rows %}
-                    <tr>
-                        <td style="font-family: monospace; white-space: nowrap;">/{{ row.command }}</td>
-                        <td>
-                            {% for role in roles %}
-                            <label style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; margin: 2px 4px 2px 0; border-radius: 12px; background: {{ '#b91c1c33' if role.id in row.current_ids else '#2a2e37' }}; border: 1px solid {{ '#b91c1c' if role.id in row.current_ids else 'transparent' }}; font-size: 12px; cursor: pointer;">
-                                <input type="checkbox" name="{{ row.field_name }}" value="{{ role.id }}"
-                                       {{ 'checked' if role.id in row.current_ids }}
-                                       onchange="this.closest('label').style.background = this.checked ? '#b91c1c33' : '#2a2e37'; this.closest('label').style.borderColor = this.checked ? '#b91c1c' : 'transparent';">
-                                {{ role.name }}
-                            </label>
-                            {% endfor %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            </div>
+            {% for group_name, rows in groups.items() %}
+            <details class="group" open style="background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; margin-bottom: 10px;">
+                <summary style="padding: 12px 16px; cursor: pointer; font-weight: 600; font-size: 13px; text-transform: capitalize;">{{ group_name }} <span style="color: #6b7280; font-weight: 400;">({{ rows|length }})</span></summary>
+                <table style="border: none; border-radius: 0;">
+                    <tbody>
+                        {% for row in rows %}
+                        <tr class="cmd-row" data-cmd="{{ row.command }}">
+                            <td style="width: 26%; font-family: monospace; white-space: nowrap;">/{{ row.command }}</td>
+                            <td style="width: 90px;">
+                                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                                    <input type="checkbox" name="{{ row.enabled_field }}" value="1" {{ 'checked' if row.enabled }}>
+                                    <span style="font-size: 12px; color: {{ '#86efac' if row.enabled else '#f87171' }};">{{ 'Enabled' if row.enabled else 'Disabled' }}</span>
+                                </label>
+                            </td>
+                            <td>
+                                <details style="display: inline-block;">
+                                    <summary style="cursor: pointer; padding: 6px 10px; background: #0f1115; border: 1px solid #2a2e37; border-radius: 4px; font-size: 12px; list-style: none; display: inline-block;">
+                                        {% if row.current_ids %}{{ row.current_ids|length }} role(s) selected{% else %}Everyone{% endif %}
+                                    </summary>
+                                    <div style="padding: 10px; background: #0f1115; border: 1px solid #2a2e37; border-top: none; border-radius: 0 0 4px 4px; max-height: 200px; overflow-y: auto;">
+                                        {% for role in roles %}
+                                        <label style="display: block; padding: 3px 0; font-size: 12px; cursor: pointer;">
+                                            <input type="checkbox" name="{{ row.field_name }}" value="{{ role.id }}" {{ 'checked' if role.id in row.current_ids }}>
+                                            {{ role.name }}
+                                        </label>
+                                        {% endfor %}
+                                    </div>
+                                </details>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </details>
+            {% endfor %}
 
-            <div style="margin-top: 16px;">
-                <button type="submit">Save changes</button>
+            <div style="margin-top: 16px; position: sticky; bottom: 16px;">
+                <button type="submit">Save all changes</button>
             </div>
         </form>
+
+        <script>
+        function filterGroups() {
+            const q = document.getElementById('filterBox').value.toLowerCase();
+            document.querySelectorAll('.cmd-row').forEach(row => {
+                const cmd = row.dataset.cmd.toLowerCase();
+                row.style.display = cmd.includes(q) ? '' : 'none';
+            });
+            document.querySelectorAll('.group').forEach(group => {
+                const visible = group.querySelectorAll('.cmd-row:not([style*="display: none"])').length;
+                group.style.display = visible > 0 ? '' : 'none';
+            });
+        }
+        </script>
 {% endblock %}
