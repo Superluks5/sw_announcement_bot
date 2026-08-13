@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+        <p class="hint">Manage roadmap items - same data your /roadmap Discord commands use.</p>
+
+        <form method="POST" action="{{ url_for('roadmap_add') }}" style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+            <select name="area" required>
+                {% for key, label in areas.items() %}
+                <option value="{{ key }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+            <select name="status" required>
+                {% for key, label in statuses.items() %}
+                <option value="{{ key }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" name="text" placeholder="New roadmap item..." style="flex: 1; min-width: 200px;" required>
+            <button type="submit">+ Add item</button>
+        </form>
+
+        {% for area_key, area_label in areas.items() %}
+        <h3 style="color: #9ca3af; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 8px;">{{ area_label }}</h3>
+        <table style="margin-bottom: 12px;">
+            <thead>
+                <tr>
+                    <th style="width: 55%">Item</th>
+                    <th style="width: 20%">Status</th>
+                    <th style="width: 25%">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items_by_area.get(area_key, []) %}
+                <tr>
+                    <td>{{ item.text }}</td>
+                    <td>{{ statuses.get(item.status, item.status) }}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('roadmap_move', item_id=item.id) }}" style="display: inline-flex; gap: 4px;">
+                            <select name="status">
+                                {% for key, label in statuses.items() %}
+                                <option value="{{ key }}" {{ 'selected' if key == item.status }}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn-secondary btn-small">Move</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('roadmap_remove', item_id=item.id) }}" style="display: inline;" onsubmit="return confirm('Remove this item?');">
+                            <button type="submit" class="btn-small" style="background: #7f1d1d;">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" style="color: #6b7280;"><em>No items yet.</em></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endfor %}
+{% endblock %}

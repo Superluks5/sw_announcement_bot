@@ -1,76 +1,5 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Bot Dashboard - Permissions</title>
-    <style>
-        * { box-sizing: border-box; }
-        body {
-            background: #0f1115;
-            color: #e5e5e5;
-            font-family: -apple-system, Segoe UI, Roboto, sans-serif;
-            margin: 0;
-            padding: 24px;
-        }
-        .top {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 1000px;
-            margin: 0 auto 8px;
-        }
-        h1 {
-            font-size: 18px;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            color: #b91c1c;
-            margin: 0;
-        }
-        .who { color: #9ca3af; font-size: 13px; }
-        a.logout { color: #9ca3af; font-size: 13px; text-decoration: none; margin-left: 12px; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        .flash-success {
-            background: #14301c; border: 1px solid #16a34a; color: #86efac;
-            padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 16px;
-        }
-        .flash-error {
-            background: #301414; border: 1px solid #dc2626; color: #fca5a5;
-            padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 16px;
-        }
-        .warn {
-            background: #302a14; border: 1px solid #ca8a04; color: #fde047;
-            padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 16px;
-        }
-        .hint { color: #6b7280; font-size: 12px; margin: 8px 0 16px; }
-        table { width: 100%; border-collapse: collapse; background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; overflow: hidden; }
-        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #2a2e37; font-size: 13px; vertical-align: top; }
-        th { background: #14161b; color: #9ca3af; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; position: sticky; top: 0; }
-        .command-cell { font-family: monospace; color: #e5e5e5; white-space: nowrap; }
-        .role-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; margin: 2px 4px 2px 0; border-radius: 12px; background: #2a2e37; font-size: 12px; cursor: pointer; user-select: none; }
-        .role-chip input { margin: 0; }
-        .role-chip.checked { background: #b91c1c33; border: 1px solid #b91c1c; }
-        button { padding: 10px 20px; border: none; border-radius: 4px; background: #b91c1c; color: white; font-weight: 600; cursor: pointer; font-size: 13px; }
-        button:hover { background: #991818; }
-        .actions { margin-top: 16px; }
-        .table-wrap { max-height: 75vh; overflow-y: auto; border-radius: 8px; }
-    </style>
-</head>
-<body>
-    <div class="top">
-        <h1>🔐 Command Permissions</h1>
-        <div>
-            <span class="who">{{ username }}</span>
-            <a class="logout" href="{{ url_for('logout') }}">Log out</a>
-        </div>
-    </div>
-
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% for category, message in messages %}
-                <div class="flash-{{ category }}">{{ message }}</div>
-            {% endfor %}
-        {% endwith %}
-
+{% extends "base.html" %}
+{% block content %}
         {% if roles_fetch_failed %}
         <div class="warn">⚠️ Couldn't fetch roles from Discord - check DISCORD_TOKEN and GUILD_ID in .env. Showing empty role list for now.</div>
         {% endif %}
@@ -78,7 +7,7 @@
         <p class="hint">Check every role allowed to use each command. Nothing checked = open to everyone. Admins can always use every command regardless.</p>
 
         <form method="POST">
-            <div class="table-wrap">
+            <div style="max-height: 75vh; overflow-y: auto; border-radius: 8px;">
             <table>
                 <thead>
                     <tr>
@@ -89,13 +18,13 @@
                 <tbody>
                     {% for row in rows %}
                     <tr>
-                        <td class="command-cell">/{{ row.command }}</td>
+                        <td style="font-family: monospace; white-space: nowrap;">/{{ row.command }}</td>
                         <td>
                             {% for role in roles %}
-                            <label class="role-chip {{ 'checked' if role.id in row.current_ids }}">
+                            <label style="display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; margin: 2px 4px 2px 0; border-radius: 12px; background: {{ '#b91c1c33' if role.id in row.current_ids else '#2a2e37' }}; border: 1px solid {{ '#b91c1c' if role.id in row.current_ids else 'transparent' }}; font-size: 12px; cursor: pointer;">
                                 <input type="checkbox" name="{{ row.field_name }}" value="{{ role.id }}"
                                        {{ 'checked' if role.id in row.current_ids }}
-                                       onchange="this.closest('.role-chip').classList.toggle('checked', this.checked)">
+                                       onchange="this.closest('label').style.background = this.checked ? '#b91c1c33' : '#2a2e37'; this.closest('label').style.borderColor = this.checked ? '#b91c1c' : 'transparent';">
                                 {{ role.name }}
                             </label>
                             {% endfor %}
@@ -106,10 +35,8 @@
             </table>
             </div>
 
-            <div class="actions">
+            <div style="margin-top: 16px;">
                 <button type="submit">Save changes</button>
             </div>
         </form>
-    </div>
-</body>
-</html>
+{% endblock %}

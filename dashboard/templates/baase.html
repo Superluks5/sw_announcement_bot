@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Bot Dashboard{% block title %}{% endblock %}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background: #0f1115;
+            color: #e5e5e5;
+            font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+            margin: 0;
+            padding: 24px;
+        }
+        .top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1100px;
+            margin: 0 auto 16px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        h1 {
+            font-size: 18px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #b91c1c;
+            margin: 0;
+        }
+        .who { color: #9ca3af; font-size: 13px; }
+        a.logout { color: #9ca3af; font-size: 13px; text-decoration: none; margin-left: 12px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .nav {
+            display: flex;
+            gap: 4px;
+            max-width: 1100px;
+            margin: 0 auto 20px;
+            border-bottom: 1px solid #2a2e37;
+        }
+        .nav a {
+            padding: 10px 16px;
+            color: #9ca3af;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+            border-bottom: 2px solid transparent;
+        }
+        .nav a.active { color: #e5e5e5; border-bottom: 2px solid #b91c1c; }
+        .nav a:hover { color: #e5e5e5; }
+        .flash-success {
+            background: #14301c; border: 1px solid #16a34a; color: #86efac;
+            padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 16px;
+        }
+        .flash-error {
+            background: #301414; border: 1px solid #dc2626; color: #fca5a5;
+            padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 16px;
+        }
+        .warn {
+            background: #302a14; border: 1px solid #ca8a04; color: #fde047;
+            padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 16px;
+        }
+        .hint { color: #6b7280; font-size: 12px; margin: 8px 0 16px; }
+        table { width: 100%; border-collapse: collapse; background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; overflow: hidden; }
+        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #2a2e37; font-size: 13px; vertical-align: top; }
+        th { background: #14161b; color: #9ca3af; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+        button, .btn { padding: 8px 16px; border: none; border-radius: 4px; background: #b91c1c; color: white; font-weight: 600; cursor: pointer; font-size: 13px; text-decoration: none; display: inline-block; }
+        button:hover, .btn:hover { background: #991818; }
+        .btn-secondary { background: #2a2e37; }
+        .btn-secondary:hover { background: #363a45; }
+        .btn-small { padding: 4px 10px; font-size: 12px; }
+        input[type=text], select {
+            padding: 8px; border-radius: 4px; border: 1px solid #2a2e37;
+            background: #0f1115; color: #e5e5e5; font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="top">
+        <h1>🛰️ Bot Dashboard</h1>
+        <div>
+            <span class="who">{{ username }}</span>
+            <a class="logout" href="{{ url_for('logout') }}">Log out</a>
+        </div>
+    </div>
+
+    <div class="nav">
+        <a href="{{ url_for('permissions_page') }}" class="{{ 'active' if active_tab == 'permissions' }}">Permissions</a>
+        <a href="{{ url_for('roadmap_page') }}" class="{{ 'active' if active_tab == 'roadmap' }}">Roadmap</a>
+    </div>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>
