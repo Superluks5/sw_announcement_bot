@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Bot Dashboard - Permissions</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            background: #0f1115;
+            color: #e5e5e5;
+            font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+            margin: 0;
+            padding: 24px;
+        }
+        .top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 900px;
+            margin: 0 auto 20px;
+        }
+        h1 {
+            font-size: 18px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #b91c1c;
+            margin: 0;
+        }
+        a.logout {
+            color: #9ca3af;
+            font-size: 13px;
+            text-decoration: none;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        .flash-success {
+            background: #14301c;
+            border: 1px solid #16a34a;
+            color: #86efac;
+            padding: 10px 14px;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+        .flash-error {
+            background: #301414;
+            border: 1px solid #dc2626;
+            color: #fca5a5;
+            padding: 10px 14px;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1a1d24;
+            border: 1px solid #2a2e37;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #2a2e37;
+            font-size: 13px;
+        }
+        th {
+            background: #14161b;
+            color: #9ca3af;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+        input[type=text] {
+            width: 100%;
+            padding: 6px 8px;
+            border-radius: 4px;
+            border: 1px solid #2a2e37;
+            background: #0f1115;
+            color: #e5e5e5;
+            font-size: 13px;
+            font-family: monospace;
+        }
+        .hint {
+            color: #6b7280;
+            font-size: 12px;
+            margin: 8px 0 16px;
+        }
+        button, .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background: #b91c1c;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        button:hover, .btn:hover { background: #991818; }
+        .actions { margin-top: 16px; display: flex; gap: 10px; align-items: center; }
+        .btn-secondary {
+            background: #2a2e37;
+        }
+        .btn-secondary:hover { background: #363a45; }
+    </style>
+</head>
+<body>
+    <div class="top">
+        <h1>🔐 Command Permissions</h1>
+        <a class="logout" href="{{ url_for('logout') }}">Log out</a>
+    </div>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <p class="hint">
+            Comma-separate multiple role IDs. Leave blank to allow everyone. Admins can always use every command regardless of this list.
+        </p>
+
+        <form method="POST" id="permForm">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 35%">Command</th>
+                        <th>Allowed Role IDs (comma-separated)</th>
+                    </tr>
+                </thead>
+                <tbody id="rows">
+                    {% for command, role_ids in items %}
+                    <tr>
+                        <td><input type="text" name="command_name" value="{{ command }}"></td>
+                        <td><input type="text" name="role_ids" value="{{ role_ids|join(', ') }}"></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="actions">
+                <button type="button" class="btn-secondary" onclick="addRow()">+ Add command</button>
+                <button type="submit">Save changes</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        function addRow() {
+            const tbody = document.getElementById('rows');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="text" name="command_name" placeholder="e.g. promote"></td>
+                <td><input type="text" name="role_ids" placeholder="role id, role id"></td>
+            `;
+            tbody.appendChild(tr);
+        }
+    </script>
+</body>
+</html>

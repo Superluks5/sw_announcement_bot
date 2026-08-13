@@ -1,4 +1,6 @@
 discord.py>=2.4.0
+aiohttp
 groq
 python-dotenv
 tzdata
+flask

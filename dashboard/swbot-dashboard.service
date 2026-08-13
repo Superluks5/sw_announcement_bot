@@ -1,0 +1,14 @@
+[Unit]
+Description=Star Wars Bot Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/sw_announcement_bot/dashboard
+ExecStart=/home/ubuntu/sw_announcement_bot/venv/bin/python3 app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
