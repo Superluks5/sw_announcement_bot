@@ -47,6 +47,17 @@
             font-size: 13px;
             margin-bottom: 14px;
         }
+        .trust-note {
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid #2a2e37;
+            text-align: left;
+            color: #9ca3af;
+            font-size: 11.5px;
+            line-height: 1.6;
+        }
+        .trust-note strong { color: #d1d5db; }
+        .trust-note code { color: #93c5fd; background: #0f1115; padding: 1px 4px; border-radius: 3px; }
     </style>
 </head>
 <body>
@@ -58,6 +69,10 @@
             {% endfor %}
         {% endwith %}
         <a class="discord-btn" href="{{ auth_url }}">Log in with Discord</a>
+
+        <div class="trust-note">
+            <strong>Is this safe?</strong> Clicking above sends you to Discord's own site to log in - the address bar must say exactly <code>discord.com</code>, nothing else. We never see or ask for your password, only your username and user ID (scope: <code>identify</code>). This is the same official login system used by MEE6, Dyno, Carl-bot, and most other Discord bot dashboards. If anything looks different from this, close the page.
+        </div>
     </div>
 </body>
 </html>
