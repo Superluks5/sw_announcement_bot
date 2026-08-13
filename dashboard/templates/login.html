@@ -20,7 +20,8 @@
             border: 1px solid #2a2e37;
             border-radius: 8px;
             padding: 32px;
-            width: 320px;
+            width: 340px;
+            text-align: center;
         }
         h1 {
             font-size: 18px;
@@ -28,45 +29,35 @@
             text-transform: uppercase;
             color: #b91c1c;
             margin: 0 0 20px;
-            text-align: center;
         }
-        input[type=password] {
+        .discord-btn {
+            display: block;
             width: 100%;
-            padding: 10px;
+            padding: 12px;
             border-radius: 4px;
-            border: 1px solid #2a2e37;
-            background: #0f1115;
-            color: #e5e5e5;
-            font-size: 14px;
-            margin-bottom: 14px;
-        }
-        button {
-            width: 100%;
-            padding: 10px;
-            border: none;
-            border-radius: 4px;
-            background: #b91c1c;
+            background: #5865F2;
             color: white;
             font-weight: 600;
-            cursor: pointer;
+            text-decoration: none;
             font-size: 14px;
         }
-        button:hover { background: #991818; }
-        .flash-error { color: #f87171; font-size: 13px; margin-bottom: 12px; }
+        .discord-btn:hover { background: #4752c4; }
+        .flash-error {
+            color: #f87171;
+            font-size: 13px;
+            margin-bottom: 14px;
+        }
     </style>
 </head>
 <body>
     <div class="card">
         <h1>🛰️ Bot Dashboard</h1>
-        <form method="POST">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% for category, message in messages %}
-                    <div class="flash-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endwith %}
-            <input type="password" name="password" placeholder="Password" autofocus required>
-            <button type="submit">Log In</button>
-        </form>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endwith %}
+        <a class="discord-btn" href="{{ auth_url }}">Log in with Discord</a>
     </div>
 </body>
 </html>

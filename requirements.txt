@@ -4,5 +4,4 @@ groq
 python-dotenv
 tzdata
 flask
-tzdata
-
+requests

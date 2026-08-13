@@ -16,8 +16,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            max-width: 900px;
-            margin: 0 auto 20px;
+            max-width: 1000px;
+            margin: 0 auto 8px;
         }
         h1 {
             font-size: 18px;
@@ -26,88 +26,42 @@
             color: #b91c1c;
             margin: 0;
         }
-        a.logout {
-            color: #9ca3af;
-            font-size: 13px;
-            text-decoration: none;
-        }
-        .container { max-width: 900px; margin: 0 auto; }
+        .who { color: #9ca3af; font-size: 13px; }
+        a.logout { color: #9ca3af; font-size: 13px; text-decoration: none; margin-left: 12px; }
+        .container { max-width: 1000px; margin: 0 auto; }
         .flash-success {
-            background: #14301c;
-            border: 1px solid #16a34a;
-            color: #86efac;
-            padding: 10px 14px;
-            border-radius: 4px;
-            font-size: 13px;
-            margin-bottom: 16px;
+            background: #14301c; border: 1px solid #16a34a; color: #86efac;
+            padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 16px;
         }
         .flash-error {
-            background: #301414;
-            border: 1px solid #dc2626;
-            color: #fca5a5;
-            padding: 10px 14px;
-            border-radius: 4px;
-            font-size: 13px;
-            margin-bottom: 16px;
+            background: #301414; border: 1px solid #dc2626; color: #fca5a5;
+            padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 16px;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: #1a1d24;
-            border: 1px solid #2a2e37;
-            border-radius: 8px;
-            overflow: hidden;
+        .warn {
+            background: #302a14; border: 1px solid #ca8a04; color: #fde047;
+            padding: 10px 14px; border-radius: 4px; font-size: 13px; margin-bottom: 16px;
         }
-        th, td {
-            padding: 10px 12px;
-            text-align: left;
-            border-bottom: 1px solid #2a2e37;
-            font-size: 13px;
-        }
-        th {
-            background: #14161b;
-            color: #9ca3af;
-            text-transform: uppercase;
-            font-size: 11px;
-            letter-spacing: 0.5px;
-        }
-        input[type=text] {
-            width: 100%;
-            padding: 6px 8px;
-            border-radius: 4px;
-            border: 1px solid #2a2e37;
-            background: #0f1115;
-            color: #e5e5e5;
-            font-size: 13px;
-            font-family: monospace;
-        }
-        .hint {
-            color: #6b7280;
-            font-size: 12px;
-            margin: 8px 0 16px;
-        }
-        button, .btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            background: #b91c1c;
-            color: white;
-            font-weight: 600;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        button:hover, .btn:hover { background: #991818; }
-        .actions { margin-top: 16px; display: flex; gap: 10px; align-items: center; }
-        .btn-secondary {
-            background: #2a2e37;
-        }
-        .btn-secondary:hover { background: #363a45; }
+        .hint { color: #6b7280; font-size: 12px; margin: 8px 0 16px; }
+        table { width: 100%; border-collapse: collapse; background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; overflow: hidden; }
+        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #2a2e37; font-size: 13px; vertical-align: top; }
+        th { background: #14161b; color: #9ca3af; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; position: sticky; top: 0; }
+        .command-cell { font-family: monospace; color: #e5e5e5; white-space: nowrap; }
+        .role-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; margin: 2px 4px 2px 0; border-radius: 12px; background: #2a2e37; font-size: 12px; cursor: pointer; user-select: none; }
+        .role-chip input { margin: 0; }
+        .role-chip.checked { background: #b91c1c33; border: 1px solid #b91c1c; }
+        button { padding: 10px 20px; border: none; border-radius: 4px; background: #b91c1c; color: white; font-weight: 600; cursor: pointer; font-size: 13px; }
+        button:hover { background: #991818; }
+        .actions { margin-top: 16px; }
+        .table-wrap { max-height: 75vh; overflow-y: auto; border-radius: 8px; }
     </style>
 </head>
 <body>
     <div class="top">
         <h1>🔐 Command Permissions</h1>
-        <a class="logout" href="{{ url_for('logout') }}">Log out</a>
+        <div>
+            <span class="who">{{ username }}</span>
+            <a class="logout" href="{{ url_for('logout') }}">Log out</a>
+        </div>
     </div>
 
     <div class="container">
@@ -117,45 +71,45 @@
             {% endfor %}
         {% endwith %}
 
-        <p class="hint">
-            Comma-separate multiple role IDs. Leave blank to allow everyone. Admins can always use every command regardless of this list.
-        </p>
+        {% if roles_fetch_failed %}
+        <div class="warn">⚠️ Couldn't fetch roles from Discord - check DISCORD_TOKEN and GUILD_ID in .env. Showing empty role list for now.</div>
+        {% endif %}
 
-        <form method="POST" id="permForm">
+        <p class="hint">Check every role allowed to use each command. Nothing checked = open to everyone. Admins can always use every command regardless.</p>
+
+        <form method="POST">
+            <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 35%">Command</th>
-                        <th>Allowed Role IDs (comma-separated)</th>
+                        <th style="width: 22%">Command</th>
+                        <th>Allowed Roles</th>
                     </tr>
                 </thead>
-                <tbody id="rows">
-                    {% for command, role_ids in items %}
+                <tbody>
+                    {% for row in rows %}
                     <tr>
-                        <td><input type="text" name="command_name" value="{{ command }}"></td>
-                        <td><input type="text" name="role_ids" value="{{ role_ids|join(', ') }}"></td>
+                        <td class="command-cell">/{{ row.command }}</td>
+                        <td>
+                            {% for role in roles %}
+                            <label class="role-chip {{ 'checked' if role.id in row.current_ids }}">
+                                <input type="checkbox" name="{{ row.field_name }}" value="{{ role.id }}"
+                                       {{ 'checked' if role.id in row.current_ids }}
+                                       onchange="this.closest('.role-chip').classList.toggle('checked', this.checked)">
+                                {{ role.name }}
+                            </label>
+                            {% endfor %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
 
             <div class="actions">
-                <button type="button" class="btn-secondary" onclick="addRow()">+ Add command</button>
                 <button type="submit">Save changes</button>
             </div>
         </form>
     </div>
-
-    <script>
-        function addRow() {
-            const tbody = document.getElementById('rows');
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td><input type="text" name="command_name" placeholder="e.g. promote"></td>
-                <td><input type="text" name="role_ids" placeholder="role id, role id"></td>
-            `;
-            tbody.appendChild(tr);
-        }
-    </script>
 </body>
 </html>
