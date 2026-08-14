@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+        <p class="hint">Shared taskboard, grouped per person. Syncs with Discord within a few seconds either way.</p>
+
+        <form method="POST" action="{{ url_for('taskboard_add') }}" style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+            <select name="assignee_id" required style="min-width: 160px;">
+                <option value="" disabled selected>Assign to...</option>
+                {% for m in members %}
+                <option value="{{ m.id }}">{{ m.name }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" name="text" placeholder="Task description..." style="flex: 1; min-width: 200px;" required>
+            <button type="submit">+ Add task</button>
+        </form>
+
+        {% for assignee_id, tasks in by_assignee.items() %}
+        <h3 style="color: #9ca3af; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 8px;">
+            👤 {{ member_names.get(assignee_id|string, 'Unknown (' ~ assignee_id ~ ')') }}
+        </h3>
+        <table style="margin-bottom: 12px;">
+            <tbody>
+                {% for task in tasks %}
+                <tr>
+                    <td style="width: 55%">{{ task.text }}</td>
+                    <td style="width: 20%">{{ status_labels.get(task.status, task.status) }}</td>
+                    <td style="width: 25%">
+                        <form method="POST" action="{{ url_for('taskboard_status', task_id=task.id) }}" style="display: inline-flex; gap: 4px;">
+                            <select name="status">
+                                {% for key, label in status_labels.items() %}
+                                <option value="{{ key }}" {{ 'selected' if key == task.status }}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn-secondary btn-small">Update</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('taskboard_remove', task_id=task.id) }}" style="display: inline;" onsubmit="return confirm('Remove this task?');">
+                            <button type="submit" class="btn-small" style="background: #7f1d1d;">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="hint">No tasks on the board yet.</p>
+        {% endfor %}
+{% endblock %}

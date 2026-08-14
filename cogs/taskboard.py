@@ -18,7 +18,7 @@ import os
 import json
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "taskboard_data.json")
 
@@ -83,6 +83,30 @@ def find_task(data: dict, assignee_id: int, number: int):
 class Taskboard(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._last_mtime = None
+        self.watch_for_changes.start()
+
+    def cog_unload(self):
+        self.watch_for_changes.cancel()
+
+    @tasks.loop(seconds=5)
+    async def watch_for_changes(self):
+        """Keeps the live taskboard in sync with edits from anywhere - Discord
+        commands or the web dashboard writing taskboard_data.json directly."""
+        if not os.path.exists(DATA_FILE):
+            return
+        mtime = os.path.getmtime(DATA_FILE)
+        if self._last_mtime is None:
+            self._last_mtime = mtime
+            return
+        if mtime != self._last_mtime:
+            self._last_mtime = mtime
+            data = load_data()
+            await self.refresh_live_message(data)
+
+    @watch_for_changes.before_loop
+    async def before_watch(self):
+        await self.bot.wait_until_ready()
 
     taskboard_group = app_commands.Group(name="taskboard", description="Shared taskboard, grouped per dev")
 
