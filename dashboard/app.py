@@ -8,6 +8,7 @@ dashboard home (usage analytics + module cards) -> per-module pages.
 import os
 import json
 import time
+import subprocess
 from datetime import datetime
 from functools import wraps
 from urllib.parse import urlencode
@@ -38,6 +39,7 @@ PERMISSIONS_FILE = os.path.join(BASE_DIR, "permissions_config.json")
 TOGGLES_FILE = os.path.join(BASE_DIR, "command_toggles.json")
 USAGE_FILE = os.path.join(BASE_DIR, "usage_data.json")
 ROADMAP_FILE = os.path.join(BASE_DIR, "roadmap_data.json")
+TASKBOARD_FILE = os.path.join(BASE_DIR, "taskboard_data.json")
 
 # Every command in the bot, grouped by module for the permissions page.
 # Keep in sync when new commands/cogs are added.
@@ -74,6 +76,38 @@ ROADMAP_STATUSES = {
 }
 
 _roles_cache = {"data": None, "fetched_at": 0}
+_members_cache = {"data": None, "fetched_at": 0}
+
+
+def fetch_guild_members() -> list[dict]:
+    """Members for GUILD_ID, fetched using the bot's own token. Cached for 60s."""
+    if _members_cache["data"] is not None and (time.time() - _members_cache["fetched_at"]) < 60:
+        return _members_cache["data"]
+    if not DISCORD_TOKEN:
+        return []
+    try:
+        resp = requests.get(
+            f"https://discord.com/api/v10/guilds/{GUILD_ID}/members?limit=1000",
+            headers={"Authorization": f"Bot {DISCORD_TOKEN}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        members = []
+        for m in resp.json():
+            user = m.get("user", {})
+            if user.get("bot"):
+                continue
+            members.append({
+                "id": user["id"],
+                "name": m.get("nick") or user.get("global_name") or user["username"],
+            })
+        members.sort(key=lambda m: m["name"].lower())
+        _members_cache["data"] = members
+        _members_cache["fetched_at"] = time.time()
+        return members
+    except Exception as e:
+        print(f"⚠️ Failed to fetch guild members: {e}")
+        return _members_cache["data"] or []
 
 
 def load_json(path: str, default):
@@ -236,7 +270,7 @@ def permissions_page():
 
         save_json(PERMISSIONS_FILE, new_data)
         save_json(TOGGLES_FILE, new_toggles)
-        flash("Saved. Restart the bot for changes to take effect (sudo systemctl restart swbot).", "success")
+        flash("Saved - takes effect immediately, no restart needed.", "success")
         return redirect(url_for("permissions_page"))
 
     groups = {}
@@ -326,6 +360,137 @@ def roadmap_remove(item_id):
         save_roadmap(data)
         flash("Removed.", "success")
     return redirect(url_for("roadmap_page"))
+
+
+# ---------- taskboard ----------
+
+TASKBOARD_STATUS_LABELS = {"todo": "⬜ To Do", "in_progress": "🟦 In Progress", "done": "✅ Done"}
+TASKBOARD_STATUS_ORDER = {"in_progress": 0, "todo": 1, "done": 2}
+
+
+def load_taskboard() -> dict:
+    return load_json(TASKBOARD_FILE, {"tasks": [], "channel_id": None, "message_id": None})
+
+
+def save_taskboard(data: dict):
+    save_json(TASKBOARD_FILE, data)
+
+
+@app.route("/taskboard")
+@login_required
+def taskboard_page():
+    data = load_taskboard()
+    members = fetch_guild_members()
+    member_names = {m["id"]: m["name"] for m in members}
+
+    by_assignee = {}
+    for idx, task in enumerate(data["tasks"]):
+        by_assignee.setdefault(task["assignee_id"], []).append({**task, "id": idx})
+    for tasks in by_assignee.values():
+        tasks.sort(key=lambda t: TASKBOARD_STATUS_ORDER.get(t["status"], 99))
+
+    return render_template(
+        "taskboard.html",
+        username=session.get("username"),
+        active_tab="taskboard",
+        members=members,
+        member_names=member_names,
+        by_assignee=by_assignee,
+        status_labels=TASKBOARD_STATUS_LABELS,
+    )
+
+
+@app.route("/taskboard/add", methods=["POST"])
+@login_required
+def taskboard_add():
+    data = load_taskboard()
+    data["tasks"].append({
+        "assignee_id": int(request.form["assignee_id"]),
+        "text": request.form["text"].strip(),
+        "status": "todo",
+    })
+    save_taskboard(data)
+    flash("Task added.", "success")
+    return redirect(url_for("taskboard_page"))
+
+
+@app.route("/taskboard/<int:task_id>/status", methods=["POST"])
+@login_required
+def taskboard_status(task_id):
+    data = load_taskboard()
+    if 0 <= task_id < len(data["tasks"]):
+        data["tasks"][task_id]["status"] = request.form["status"]
+        save_taskboard(data)
+        flash("Updated.", "success")
+    return redirect(url_for("taskboard_page"))
+
+
+@app.route("/taskboard/<int:task_id>/remove", methods=["POST"])
+@login_required
+def taskboard_remove(task_id):
+    data = load_taskboard()
+    if 0 <= task_id < len(data["tasks"]):
+        data["tasks"].pop(task_id)
+        save_taskboard(data)
+        flash("Removed.", "success")
+    return redirect(url_for("taskboard_page"))
+
+
+# ---------- bot control ----------
+
+def get_service_status(service: str) -> dict:
+    try:
+        result = subprocess.run(
+            ["systemctl", "is-active", service], capture_output=True, text=True, timeout=5
+        )
+        active = result.stdout.strip() == "active"
+    except Exception:
+        active = None  # unknown - couldn't check
+
+    uptime = None
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", service, "--property=ActiveEnterTimestamp", "--value"],
+            capture_output=True, text=True, timeout=5,
+        )
+        ts = result.stdout.strip()
+        if ts:
+            uptime = ts
+    except Exception:
+        pass
+
+    return {"active": active, "since": uptime}
+
+
+@app.route("/control")
+@login_required
+def control_page():
+    bot_status = get_service_status("swbot")
+    dashboard_status = get_service_status("swbot-dashboard")
+    return render_template(
+        "control.html",
+        username=session.get("username"),
+        active_tab="control",
+        bot_status=bot_status,
+        dashboard_status=dashboard_status,
+    )
+
+
+@app.route("/control/restart/<service>", methods=["POST"])
+@login_required
+def restart_service(service):
+    allowed_services = {"swbot", "swbot-dashboard"}
+    if service not in allowed_services:
+        flash("Unknown service.", "error")
+        return redirect(url_for("control_page"))
+
+    try:
+        subprocess.run(["sudo", "/usr/bin/systemctl", "restart", service], check=True, timeout=15)
+        flash(f"Restarted {service}.", "success")
+    except Exception as e:
+        flash(f"Failed to restart {service}: {e}", "error")
+
+    return redirect(url_for("control_page"))
 
 
 if __name__ == "__main__":

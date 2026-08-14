@@ -18,7 +18,7 @@ import os
 import json
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "roadmap_data.json")
 
@@ -122,6 +122,33 @@ status_choices = [app_commands.Choice(name=label, value=key) for key, label in S
 class Roadmap(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._last_mtime = None
+        self.watch_for_changes.start()
+
+    def cog_unload(self):
+        self.watch_for_changes.cancel()
+
+    @tasks.loop(seconds=5)
+    async def watch_for_changes(self):
+        """Picks up edits made from anywhere - not just Discord commands, but
+        also the web dashboard writing roadmap_data.json directly - and keeps
+        the live Discord message in sync within a few seconds either way."""
+        if not os.path.exists(DATA_FILE):
+            return
+
+        mtime = os.path.getmtime(DATA_FILE)
+        if self._last_mtime is None:
+            self._last_mtime = mtime  # first run - just record it, don't refresh yet
+            return
+
+        if mtime != self._last_mtime:
+            self._last_mtime = mtime
+            data = load_data()
+            await self.refresh_live_message(data)
+
+    @watch_for_changes.before_loop
+    async def before_watch(self):
+        await self.bot.wait_until_ready()
 
     roadmap_group = app_commands.Group(name="roadmap", description="Manage and post the development roadmap")
 
