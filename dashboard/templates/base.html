@@ -89,7 +89,28 @@
             max-width: 1200px; margin: 0 auto 22px; flex-wrap: wrap; gap: 10px;
         }
         .hud-title { font-size: 20px; }
-        .hud-right { display: flex; align-items: center; gap: 14px; }
+        .hud-right { display: flex; align-items: center; gap: 10px; position: relative; }
+        .menu-btn {
+            width: 34px; height: 34px; border-radius: 6px; background: var(--panel-alt);
+            border: 1px solid var(--border); color: var(--text-dim); cursor: pointer;
+            font-size: 16px; display: flex; align-items: center; justify-content: center;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .menu-btn:hover { background: #21252d; border-color: var(--border-bright); }
+        .dropdown {
+            position: absolute; top: 42px; right: 0; min-width: 200px;
+            background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+            padding: 10px; z-index: 20; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            display: none; animation: fadeSlideIn 0.15s ease;
+        }
+        .dropdown.open { display: block; }
+        .dropdown-row { padding: 8px 10px; font-size: 12.5px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+        .dropdown-divider { height: 1px; background: var(--border); margin: 6px 0; }
+        .dropdown-link {
+            display: block; padding: 8px 10px; border-radius: 5px; font-size: 13px;
+            color: var(--text); text-decoration: none; transition: background 0.12s;
+        }
+        .dropdown-link:hover { background: var(--panel-alt); }
         .status-pill {
             display: inline-flex; align-items: center; gap: 6px;
             padding: 5px 11px; border-radius: 20px; font-size: 11px; font-weight: 600;
@@ -181,20 +202,29 @@
         @media (max-width: 860px) {
             .shell { flex-direction: column; }
             .sidebar {
-                width: 100%; height: auto; position: sticky; top: 0; z-index: 10;
-                padding: 10px; display: flex; align-items: center; gap: 4px;
+                position: fixed; bottom: 0; left: 0; right: 0; top: auto;
+                width: 100%; height: 62px; z-index: 30;
+                display: flex; align-items: center; justify-content: space-around;
+                padding: 0 4px; border-right: none; border-top: 1px solid var(--border);
                 overflow-x: auto; -webkit-overflow-scrolling: touch;
             }
-            .sidebar-brand { display: none; }
-            .nav-group-label { display: none; }
-            .nav-item { flex-direction: column; gap: 2px; padding: 7px 12px; white-space: nowrap; font-size: 10.5px; }
-            .nav-item .icon { font-size: 17px; }
-            .nav-item.active::before { display: none; }
-            .main { padding: 14px 14px 32px; }
+            .sidebar-brand, .nav-group-label { display: none; }
+            .nav-item {
+                flex-direction: column; gap: 2px; padding: 6px 10px; white-space: nowrap;
+                font-size: 9.5px; margin-bottom: 0; flex-shrink: 0;
+            }
+            .nav-item .icon { font-size: 18px; }
+            .nav-item.active::before {
+                left: 50%; top: 2px; transform: translateX(-50%) scaleX(0);
+                width: 60%; height: 2px; animation: navInMobile 0.25s ease forwards;
+            }
+            @keyframes navInMobile { to { transform: translateX(-50%) scaleX(1); } }
+            .main { padding: 14px 14px 84px; }
             table { font-size: 12px; }
             th, td { padding: 8px 6px; }
             button, .btn { padding: 12px 18px; font-size: 14px; }
             input[type=text], select { font-size: 16px; padding: 10px; }
+            .dropdown { right: 0; left: auto; }
         }
     </style>
 </head>
@@ -210,26 +240,42 @@
             <a href="{{ url_for('permissions_page') }}" class="nav-item {{ 'active' if active_tab == 'permissions' }}"><span class="icon">🔐</span> Permissions</a>
             <a href="{{ url_for('roadmap_page') }}" class="nav-item {{ 'active' if active_tab == 'roadmap' }}"><span class="icon">🗺️</span> Roadmap</a>
             <a href="{{ url_for('taskboard_page') }}" class="nav-item {{ 'active' if active_tab == 'taskboard' }}"><span class="icon">📋</span> Taskboard</a>
+            <a href="{{ url_for('partners_page') }}" class="nav-item {{ 'active' if active_tab == 'partners' }}"><span class="icon">🤝</span> Partners</a>
             <a href="{{ url_for('embed_builder_page') }}" class="nav-item {{ 'active' if active_tab == 'embed_builder' }}"><span class="icon">🧩</span> Embed Builder</a>
 
             <div class="nav-group-label">System</div>
             <a href="{{ url_for('server_config_page') }}" class="nav-item {{ 'active' if active_tab == 'server_config' }}"><span class="icon">⚙️</span> Server Config</a>
             <a href="{{ url_for('logs_page') }}" class="nav-item {{ 'active' if active_tab == 'logs' }}"><span class="icon">📜</span> Logs</a>
             <a href="{{ url_for('control_page') }}" class="nav-item {{ 'active' if active_tab == 'control' }}"><span class="icon">🖥️</span> Bot Control</a>
+            <a href="{{ url_for('maintenance_page') }}" class="nav-item {{ 'active' if active_tab == 'maintenance' }}"><span class="icon">🔧</span> Maintenance</a>
         </nav>
 
         <main class="main">
             <div class="hud-bar">
                 <h1 class="hud-title">{% block page_title %}{% endblock %}</h1>
                 <div class="hud-right">
-                    <span class="status-pill">
-                        <span class="status-dot {{ 'online' if global_bot_status.active else 'offline' }}"></span>
-                        {{ 'Bot Online' if global_bot_status.active else 'Bot Offline' }}
-                    </span>
-                    <span class="who">{{ username }}</span>
-                    <a class="logout" href="{{ url_for('logout') }}">Log out</a>
+                    <button class="menu-btn" onclick="toggleMenu(event)" aria-label="Menu">⋮</button>
+                    <div class="dropdown" id="headerDropdown">
+                        <div class="dropdown-row">
+                            <span class="status-dot {{ 'online' if global_bot_status.active else 'offline' }}"></span>
+                            {{ 'Bot Online' if global_bot_status.active else 'Bot Offline' }}
+                        </div>
+                        <div class="dropdown-row">👤 {{ username }}</div>
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-link" href="{{ url_for('logout') }}">Log out</a>
+                    </div>
                 </div>
             </div>
+
+            <script>
+            function toggleMenu(e) {
+                e.stopPropagation();
+                document.getElementById('headerDropdown').classList.toggle('open');
+            }
+            document.addEventListener('click', () => {
+                document.getElementById('headerDropdown').classList.remove('open');
+            });
+            </script>
 
             <div class="container">
                 {% with messages = get_flashed_messages(with_categories=true) %}
