@@ -45,6 +45,11 @@ EVERYONE including admins. Absent = enabled (default).
 usage_data.json (same folder, gitignored) is a running count of how many
 times each command has been successfully used - read by the dashboard's
 analytics page. Purely informational, never affects permissions.
+
+maintenance.json (same folder, gitignored) controls maintenance mode - when
+enabled, blocks EVERY command for EVERYONE except one exempt Discord user
+ID, overriding admin bypass entirely. Managed via the dashboard's
+Maintenance page.
 """
 
 import os
@@ -57,6 +62,7 @@ ADMIN_BYPASS = True
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "permissions_config.json")
 TOGGLES_FILE = os.path.join(os.path.dirname(__file__), "command_toggles.json")
 USAGE_FILE = os.path.join(os.path.dirname(__file__), "usage_data.json")
+MAINTENANCE_FILE = os.path.join(os.path.dirname(__file__), "maintenance.json")
 
 
 def load_config() -> dict[str, list[int]]:
@@ -111,11 +117,40 @@ def record_usage(command_name: str):
         print(f"⚠️ Failed to record command usage: {e}")
 
 
+def load_maintenance() -> dict:
+    default = {"enabled": False, "allowed_user_id": None}
+    if not os.path.exists(MAINTENANCE_FILE):
+        with open(MAINTENANCE_FILE, "w", encoding="utf-8") as f:
+            json.dump(default, f, indent=2)
+        return default
+    with open(MAINTENANCE_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    for key, value in default.items():
+        data.setdefault(key, value)
+    return data
+
+
+def is_maintenance_blocking(user_id: int) -> bool:
+    """True if maintenance mode is on AND this user is not the exempt one -
+    this applies even to server admins, unlike every other check here."""
+    m = load_maintenance()
+    if not m.get("enabled"):
+        return False
+    allowed = m.get("allowed_user_id")
+    return str(user_id) != str(allowed)
+
+
 def is_command_allowed(interaction: discord.Interaction) -> bool:
     if interaction.command is None:
         return True
 
     command_name = interaction.command.qualified_name
+
+    # Maintenance mode overrides everything else, including admin bypass -
+    # that's the whole point of it.
+    if isinstance(interaction.user, discord.Member) and is_maintenance_blocking(interaction.user.id):
+        return False
+
     is_admin = ADMIN_BYPASS and isinstance(interaction.user, discord.Member) and interaction.user.guild_permissions.administrator
 
     # A fully disabled command blocks everyone, including admins - that's
