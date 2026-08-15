@@ -1,12 +1,13 @@
 {% extends "base.html" %}
+{% block page_title %}📜 Logs{% endblock %}
 {% block content %}
         <p class="hint">Most recent 150 entries, newest first. Also mirrored to your Discord log channel if LOG_WEBHOOK_URL is set.</p>
 
         {% if logs %}
         <div style="max-height: 75vh; overflow-y: auto;">
         {% for entry in logs %}
-        <div style="background: #1a1d24; border-left: 3px solid {{ '#dc2626' if entry.level == 'error' else '#2a2e37' }}; border-radius: 4px; padding: 10px 14px; margin-bottom: 6px; font-size: 12.5px;">
-            <div style="color: #6b7280; font-size: 11px; margin-bottom: 4px;">{{ entry.time_display }} · {{ entry.level|upper }}</div>
+        <div style="background: #14161b; border-left: 3px solid {{ '#dc2626' if entry.level == 'error' else '#262a33' }}; border-radius: 4px; padding: 10px 14px; margin-bottom: 6px; font-size: 12.5px;">
+            <div style="color: #565d6b; font-size: 11px; margin-bottom: 4px;">{{ entry.time_display }} · {{ entry.level|upper }}</div>
             <div style="white-space: pre-wrap; font-family: monospace; color: #d1d5db;">{{ entry.message }}</div>
         </div>
         {% endfor %}
