@@ -15,3 +15,5 @@ env/
 permissions_config.json
 command_toggles.json
 usage_data.json
+server_config.json
+bot_logs.json
