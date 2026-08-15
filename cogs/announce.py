@@ -32,7 +32,7 @@ from groq import Groq
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 SERVER_NAME = os.environ.get("SERVER_NAME", "Your Server Name")
-MODEL = "llama-3.3-70b-versatile"
+MODEL = "openai/gpt-oss-120b"  # llama-3.3-70b-versatile was decommissioned by Groq on Aug 16, 2026
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
@@ -61,7 +61,7 @@ TEMPLATE = """🌌 「 SERVER ANNOUNCEMENT 」 🌌
 
 # Edit this list to match your server's actual divisions/commands.
 # "custom" always gets added automatically as the last dropdown option.
-DIVISIONS = ["Supreme Command", "Lead Command", "High Command", "Development Bureau", "Imperial Security Bureau", "Partnership Bureau", "Management Team"]
+DIVISIONS = ["Supreme Command", "High Command", "Naval Command", "Intelligence Bureau"]
 DEFAULT_DIVISION = DIVISIONS[0]
 
 
@@ -244,6 +244,8 @@ BODY: <body here>"""
         model=MODEL,
         max_tokens=1000,
         messages=[{"role": "user", "content": prompt}],
+        reasoning_effort="low",
+        reasoning_format="hidden",
     )
     text = response.choices[0].message.content
 
