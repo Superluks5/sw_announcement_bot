@@ -68,11 +68,20 @@
                     <div style="font-size: 12px; color: var(--text-dim);">Welcome/leave messages and auto-role.</div>
                 </div>
             </a>
-            <div class="hud-panel" style="opacity: 0.45;">
-                <div style="font-size: 24px; margin-bottom: 8px;">🤝</div>
-                <div style="font-weight: 600; font-size: 14.5px; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif;">Partners</div>
-                <div style="font-size: 12px; color: var(--text-dim);">Coming soon.</div>
-            </div>
+            <a href="{{ url_for('partners_page') }}" class="hud-panel-link">
+                <div class="hud-panel" style="height: 100%;">
+                    <div style="font-size: 24px; margin-bottom: 8px;">🤝</div>
+                    <div style="font-weight: 600; font-size: 14.5px; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif;">Partners</div>
+                    <div style="font-size: 12px; color: var(--text-dim);">Manage the partnered servers/creators directory.</div>
+                </div>
+            </a>
+            <a href="{{ url_for('maintenance_page') }}" class="hud-panel-link">
+                <div class="hud-panel" style="height: 100%;">
+                    <div style="font-size: 24px; margin-bottom: 8px;">🔧</div>
+                    <div style="font-weight: 600; font-size: 14.5px; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif;">Maintenance</div>
+                    <div style="font-size: 12px; color: var(--text-dim);">Emergency lockdown - blocks all commands except you.</div>
+                </div>
+            </a>
         </div>
 
         <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
