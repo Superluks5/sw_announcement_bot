@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block page_title %}🤝 Partners{% endblock %}
+{% block content %}
+        <p class="hint">Directory of partnered servers/creators. Syncs with Discord within a few seconds either way.</p>
+
+        <form method="POST" action="{{ url_for('partners_add') }}" style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+            <input type="text" name="name" placeholder="Partner name" required style="min-width: 160px;">
+            <input type="text" name="link" placeholder="Invite/profile link" required style="flex: 1; min-width: 200px;">
+            <input type="text" name="note" placeholder="Optional note" style="min-width: 160px;">
+            <button type="submit">+ Add partner</button>
+        </form>
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 20%">Name</th>
+                    <th style="width: 35%">Link</th>
+                    <th>Note</th>
+                    <th style="width: 90px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in partners %}
+                <tr>
+                    <td>{{ p.name }}</td>
+                    <td style="word-break: break-all;"><a href="{{ p.link }}" target="_blank" style="color: var(--cyan);">{{ p.link }}</a></td>
+                    <td style="color: var(--text-dim);">{{ p.note or '-' }}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('partners_remove', partner_id=p.id) }}" onsubmit="return confirm('Remove this partner?');">
+                            <button type="submit" class="btn-small" style="background: var(--red-dim);">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="color: var(--text-faint);"><em>No partners listed yet.</em></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+{% endblock %}
