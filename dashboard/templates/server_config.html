@@ -1,37 +1,38 @@
 {% extends "base.html" %}
+{% block page_title %}⚙️ Server Config{% endblock %}
 {% block content %}
         <p class="hint">Welcome/leave messages support {{ '{mention}' }}, {{ '{user}' }}, {{ '{server}' }} placeholders.</p>
 
         <form method="POST" style="max-width: 600px;">
-            <div style="background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
-                <h3 style="margin: 0 0 12px; font-size: 13px; color: #9ca3af; text-transform: uppercase;">👋 Welcome Messages</h3>
-                <label style="display: block; font-size: 12px; color: #9ca3af; margin-bottom: 4px;">Channel</label>
+            <div style="background: #14161b; border: 1px solid #262a33; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
+                <h3 style="margin: 0 0 12px; font-size: 13px; color: #8b93a1; text-transform: uppercase;">👋 Welcome Messages</h3>
+                <label style="display: block; font-size: 12px; color: #8b93a1; margin-bottom: 4px;">Channel</label>
                 <select name="welcome_channel_id" style="width: 100%; margin-bottom: 12px;">
                     <option value="">-- Disabled --</option>
                     {% for c in channels %}
                     <option value="{{ c.id }}" {{ 'selected' if config.welcome_channel_id == c.id }}>#{{ c.name }}</option>
                     {% endfor %}
                 </select>
-                <label style="display: block; font-size: 12px; color: #9ca3af; margin-bottom: 4px;">Message</label>
+                <label style="display: block; font-size: 12px; color: #8b93a1; margin-bottom: 4px;">Message</label>
                 <input type="text" name="welcome_message" value="{{ config.welcome_message }}" style="width: 100%;">
             </div>
 
-            <div style="background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
-                <h3 style="margin: 0 0 12px; font-size: 13px; color: #9ca3af; text-transform: uppercase;">👋 Leave Messages</h3>
-                <label style="display: block; font-size: 12px; color: #9ca3af; margin-bottom: 4px;">Channel</label>
+            <div style="background: #14161b; border: 1px solid #262a33; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
+                <h3 style="margin: 0 0 12px; font-size: 13px; color: #8b93a1; text-transform: uppercase;">👋 Leave Messages</h3>
+                <label style="display: block; font-size: 12px; color: #8b93a1; margin-bottom: 4px;">Channel</label>
                 <select name="leave_channel_id" style="width: 100%; margin-bottom: 12px;">
                     <option value="">-- Disabled --</option>
                     {% for c in channels %}
                     <option value="{{ c.id }}" {{ 'selected' if config.leave_channel_id == c.id }}>#{{ c.name }}</option>
                     {% endfor %}
                 </select>
-                <label style="display: block; font-size: 12px; color: #9ca3af; margin-bottom: 4px;">Message</label>
+                <label style="display: block; font-size: 12px; color: #8b93a1; margin-bottom: 4px;">Message</label>
                 <input type="text" name="leave_message" value="{{ config.leave_message }}" style="width: 100%;">
             </div>
 
-            <div style="background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
-                <h3 style="margin: 0 0 12px; font-size: 13px; color: #9ca3af; text-transform: uppercase;">🎭 Auto-Role</h3>
-                <label style="display: block; font-size: 12px; color: #9ca3af; margin-bottom: 4px;">Role given automatically on join</label>
+            <div style="background: #14161b; border: 1px solid #262a33; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
+                <h3 style="margin: 0 0 12px; font-size: 13px; color: #8b93a1; text-transform: uppercase;">🎭 Auto-Role</h3>
+                <label style="display: block; font-size: 12px; color: #8b93a1; margin-bottom: 4px;">Role given automatically on join</label>
                 <select name="auto_role_id" style="width: 100%;">
                     <option value="">-- Disabled --</option>
                     {% for r in roles %}
@@ -40,9 +41,9 @@
                 </select>
             </div>
 
-            <div style="background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
-                <h3 style="margin: 0 0 12px; font-size: 13px; color: #9ca3af; text-transform: uppercase;">📝 Log Channel</h3>
-                <label style="display: block; font-size: 12px; color: #9ca3af; margin-bottom: 4px;">Where important bot events get posted (also configurable via .env LOG_WEBHOOK_URL)</label>
+            <div style="background: #14161b; border: 1px solid #262a33; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
+                <h3 style="margin: 0 0 12px; font-size: 13px; color: #8b93a1; text-transform: uppercase;">📝 Log Channel</h3>
+                <label style="display: block; font-size: 12px; color: #8b93a1; margin-bottom: 4px;">Where important bot events get posted (also configurable via .env LOG_WEBHOOK_URL)</label>
                 <select name="log_channel_id" style="width: 100%;">
                     <option value="">-- Not set --</option>
                     {% for c in channels %}
