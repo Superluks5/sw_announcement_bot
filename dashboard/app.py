@@ -40,6 +40,9 @@ TOGGLES_FILE = os.path.join(BASE_DIR, "command_toggles.json")
 USAGE_FILE = os.path.join(BASE_DIR, "usage_data.json")
 ROADMAP_FILE = os.path.join(BASE_DIR, "roadmap_data.json")
 TASKBOARD_FILE = os.path.join(BASE_DIR, "taskboard_data.json")
+SERVER_CONFIG_FILE = os.path.join(BASE_DIR, "server_config.json")
+BOT_LOGS_FILE = os.path.join(BASE_DIR, "bot_logs.json")
+WEBHOOKS_FILE = os.path.join(BASE_DIR, "dashboard_webhooks.json")
 
 # Every command in the bot, grouped by module for the permissions page.
 # Keep in sync when new commands/cogs are added.
@@ -77,6 +80,30 @@ ROADMAP_STATUSES = {
 
 _roles_cache = {"data": None, "fetched_at": 0}
 _members_cache = {"data": None, "fetched_at": 0}
+_channels_cache = {"data": None, "fetched_at": 0}
+
+
+def fetch_guild_channels() -> list[dict]:
+    """Text channels for GUILD_ID, fetched using the bot's own token. Cached for 60s."""
+    if _channels_cache["data"] is not None and (time.time() - _channels_cache["fetched_at"]) < 60:
+        return _channels_cache["data"]
+    if not DISCORD_TOKEN:
+        return []
+    try:
+        resp = requests.get(
+            f"https://discord.com/api/v10/guilds/{GUILD_ID}/channels",
+            headers={"Authorization": f"Bot {DISCORD_TOKEN}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        channels = [c for c in resp.json() if c["type"] == 0]  # 0 = text channel
+        channels.sort(key=lambda c: c.get("position", 0))
+        _channels_cache["data"] = channels
+        _channels_cache["fetched_at"] = time.time()
+        return channels
+    except Exception as e:
+        print(f"⚠️ Failed to fetch guild channels: {e}")
+        return _channels_cache["data"] or []
 
 
 def fetch_guild_members() -> list[dict]:
@@ -238,11 +265,23 @@ def dashboard_home():
             last_used_display = datetime.fromtimestamp(stats["last_used"]).strftime("%b %d, %H:%M")
         top_commands.append((cmd, {**stats, "last_used_display": last_used_display}))
 
+    # Build last-7-days totals across ALL commands for the chart
+    from datetime import timedelta
+    today = datetime.now().date()
+    day_labels = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
+    day_totals = {d: 0 for d in day_labels}
+    for stats in usage.values():
+        for day, count in stats.get("daily", {}).items():
+            if day in day_totals:
+                day_totals[day] += count
+
     return render_template(
         "dashboard_home.html",
         username=session.get("username"),
         active_tab="home",
         top_commands=top_commands,
+        chart_labels=[d[5:] for d in day_labels],  # MM-DD
+        chart_values=[day_totals[d] for d in day_labels],
     )
 
 
@@ -434,6 +473,133 @@ def taskboard_remove(task_id):
         save_taskboard(data)
         flash("Removed.", "success")
     return redirect(url_for("taskboard_page"))
+
+
+# ---------- server config ----------
+
+SERVER_CONFIG_DEFAULTS = {
+    "welcome_channel_id": None,
+    "welcome_message": "Welcome {mention} to {server}!",
+    "leave_channel_id": None,
+    "leave_message": "{user} has left {server}.",
+    "auto_role_id": None,
+    "log_channel_id": None,
+}
+
+
+@app.route("/server-config", methods=["GET", "POST"])
+@login_required
+def server_config_page():
+    config = load_json(SERVER_CONFIG_FILE, dict(SERVER_CONFIG_DEFAULTS))
+    for key, default in SERVER_CONFIG_DEFAULTS.items():
+        config.setdefault(key, default)
+
+    if request.method == "POST":
+        new_config = {
+            "welcome_channel_id": request.form.get("welcome_channel_id") or None,
+            "welcome_message": request.form.get("welcome_message", "").strip(),
+            "leave_channel_id": request.form.get("leave_channel_id") or None,
+            "leave_message": request.form.get("leave_message", "").strip(),
+            "auto_role_id": request.form.get("auto_role_id") or None,
+            "log_channel_id": request.form.get("log_channel_id") or None,
+        }
+        save_json(SERVER_CONFIG_FILE, new_config)
+        flash("Saved - takes effect immediately, no restart needed.", "success")
+        return redirect(url_for("server_config_page"))
+
+    return render_template(
+        "server_config.html",
+        username=session.get("username"),
+        active_tab="server_config",
+        config=config,
+        channels=fetch_guild_channels(),
+        roles=fetch_guild_roles(),
+    )
+
+
+# ---------- logs ----------
+
+@app.route("/logs")
+@login_required
+def logs_page():
+    logs = load_json(BOT_LOGS_FILE, [])
+    logs = list(reversed(logs))[:150]
+    for entry in logs:
+        entry["time_display"] = datetime.fromtimestamp(entry["time"]).strftime("%b %d, %H:%M:%S")
+    return render_template(
+        "logs.html",
+        username=session.get("username"),
+        active_tab="logs",
+        logs=logs,
+    )
+
+
+# ---------- embed builder ----------
+
+def load_webhooks() -> list[dict]:
+    return load_json(WEBHOOKS_FILE, [])
+
+
+def save_webhooks(webhooks: list[dict]):
+    save_json(WEBHOOKS_FILE, webhooks)
+
+
+@app.route("/embed-builder")
+@login_required
+def embed_builder_page():
+    return render_template(
+        "embed_builder.html",
+        username=session.get("username"),
+        active_tab="embed_builder",
+        webhooks=load_webhooks(),
+    )
+
+
+@app.route("/embed-builder/webhooks", methods=["POST"])
+@login_required
+def embed_builder_add_webhook():
+    webhooks = load_webhooks()
+    name = request.form.get("name", "").strip()
+    url = request.form.get("url", "").strip()
+    if name and url:
+        webhooks.append({"name": name, "url": url})
+        save_webhooks(webhooks)
+        flash("Webhook saved.", "success")
+    return redirect(url_for("embed_builder_page"))
+
+
+@app.route("/embed-builder/webhooks/<int:index>/delete", methods=["POST"])
+@login_required
+def embed_builder_delete_webhook(index):
+    webhooks = load_webhooks()
+    if 0 <= index < len(webhooks):
+        webhooks.pop(index)
+        save_webhooks(webhooks)
+        flash("Webhook removed.", "success")
+    return redirect(url_for("embed_builder_page"))
+
+
+@app.route("/embed-builder/send", methods=["POST"])
+@login_required
+def embed_builder_send():
+    webhook_url = request.form.get("webhook_url", "").strip()
+    payload_raw = request.form.get("payload", "").strip()
+
+    if not webhook_url or not payload_raw:
+        return {"ok": False, "error": "Missing webhook URL or payload."}, 400
+
+    try:
+        payload = json.loads(payload_raw)
+    except json.JSONDecodeError as e:
+        return {"ok": False, "error": f"Invalid JSON: {e}"}, 400
+
+    try:
+        resp = requests.post(webhook_url, json=payload, timeout=15)
+        if resp.status_code >= 300:
+            return {"ok": False, "error": f"Discord returned {resp.status_code}: {resp.text[:300]}"}, 400
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 500
 
 
 # ---------- bot control ----------
