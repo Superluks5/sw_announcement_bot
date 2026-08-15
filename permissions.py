@@ -93,9 +93,17 @@ def record_usage(command_name: str):
         if os.path.exists(USAGE_FILE):
             with open(USAGE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-        entry = data.get(command_name, {"count": 0, "last_used": None})
+        entry = data.get(command_name, {"count": 0, "last_used": None, "daily": {}})
+        entry.setdefault("daily", {})
         entry["count"] += 1
         entry["last_used"] = int(time.time())
+        today = time.strftime("%Y-%m-%d")
+        entry["daily"][today] = entry["daily"].get(today, 0) + 1
+        # Keep only the last 30 days per command so the file doesn't grow forever
+        if len(entry["daily"]) > 30:
+            oldest_keys = sorted(entry["daily"].keys())[:-30]
+            for k in oldest_keys:
+                del entry["daily"][k]
         data[command_name] = entry
         with open(USAGE_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
