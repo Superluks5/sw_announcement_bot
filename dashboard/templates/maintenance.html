@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block page_title %}🔧 Maintenance{% endblock %}
+{% block content %}
+        <div class="warn" style="margin-bottom: 20px;">
+            ⚠️ When enabled, <strong>every command is blocked for everyone</strong> - including server administrators -
+            except the one exempt user you set below. Use this for emergency lockdowns (bad deploy, abuse in progress, etc.), not routine maintenance.
+        </div>
+
+        <div class="hud-panel" style="max-width: 480px;">
+            <form method="POST">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 18px;">
+                    <label style="position: relative; display: inline-block; width: 46px; height: 26px;">
+                        <input type="checkbox" name="enabled" {{ 'checked' if config.enabled }} style="opacity:0; width:0; height:0;" onchange="this.nextElementSibling.style.background = this.checked ? 'var(--red)' : 'var(--border)'; this.nextElementSibling.querySelector('span').style.transform = this.checked ? 'translateX(20px)' : 'translateX(0)';">
+                        <span style="position:absolute; inset:0; background: {{ 'var(--red)' if config.enabled else 'var(--border)' }}; border-radius: 26px; transition: background 0.2s; cursor: pointer;" onclick="const cb=this.previousElementSibling; cb.checked=!cb.checked; cb.dispatchEvent(new Event('change'));">
+                            <span style="position:absolute; top:3px; left:3px; width:20px; height:20px; background:white; border-radius:50%; transition: transform 0.2s; transform: {{ 'translateX(20px)' if config.enabled }};"></span>
+                        </span>
+                    </label>
+                    <strong style="font-family: 'Rajdhani', sans-serif; font-size: 15px;">
+                        Maintenance Mode: {{ 'ON' if config.enabled else 'OFF' }}
+                    </strong>
+                </div>
+
+                <label style="display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px;">Exempt Discord User ID (can still use commands)</label>
+                <input type="text" name="allowed_user_id" value="{{ config.allowed_user_id or my_user_id }}" style="width: 100%; margin-bottom: 6px;">
+                <p class="hint">Defaults to you ({{ my_user_id }}). Change this if someone else should be exempt instead.</p>
+
+                <button type="submit">Save</button>
+            </form>
+        </div>
+{% endblock %}
