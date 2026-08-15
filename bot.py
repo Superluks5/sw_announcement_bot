@@ -7,6 +7,8 @@ just drop a new .py file in cogs/ - you don't need to edit this file.
 """
 
 import os
+import json
+import time
 import asyncio
 import traceback
 import discord
@@ -30,10 +32,30 @@ GUILD_ID = int(os.environ.get("GUILD_ID", 1535372103593894028))
 # notifications posted to a private log channel. Leave unset to disable.
 LOG_WEBHOOK_URL = os.environ.get("LOG_WEBHOOK_URL")
 
+LOCAL_LOG_FILE = os.path.join(os.path.dirname(__file__), "bot_logs.json")
+MAX_LOCAL_LOGS = 300
 
-async def send_log(content: str):
-    """Posts a message to the log webhook, if one is configured. Safe to call
-    even if LOG_WEBHOOK_URL is unset - it just does nothing in that case."""
+
+def record_local_log(level: str, message: str):
+    """Best-effort local log, capped at MAX_LOCAL_LOGS entries - read by the
+    dashboard's Logs tab. Separate from the optional Discord webhook."""
+    try:
+        logs = []
+        if os.path.exists(LOCAL_LOG_FILE):
+            with open(LOCAL_LOG_FILE, "r", encoding="utf-8") as f:
+                logs = json.load(f)
+        logs.append({"time": int(time.time()), "level": level, "message": message})
+        logs = logs[-MAX_LOCAL_LOGS:]
+        with open(LOCAL_LOG_FILE, "w", encoding="utf-8") as f:
+            json.dump(logs, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"⚠️ Failed to write local log: {e}")
+
+
+async def send_log(content: str, level: str = "info"):
+    """Posts a message to the log webhook (if configured) AND records it
+    locally for the dashboard's Logs tab."""
+    record_local_log(level, content)
     if not LOG_WEBHOOK_URL:
         return
     try:
@@ -71,7 +93,7 @@ class PermissionedTree(app_commands.CommandTree):
         command_name = interaction.command.qualified_name if interaction.command else "unknown"
         tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
         print(f"⚠️ Error in /{command_name}:\n{tb}")
-        await send_log(f"⚠️ **Error in `/{command_name}`** (used by {interaction.user})\n```{tb[-1800:]}```")
+        await send_log(f"⚠️ **Error in `/{command_name}`** (used by {interaction.user})\n```{tb[-1800:]}```", level="error")
 
 
 intents = discord.Intents.default()
