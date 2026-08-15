@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block page_title %}🗺️ Roadmap{% endblock %}
 {% block content %}
         <p class="hint">Manage roadmap items - same data your /roadmap Discord commands use.</p>
 
@@ -18,7 +19,7 @@
         </form>
 
         {% for area_key, area_label in areas.items() %}
-        <h3 style="color: #9ca3af; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 8px;">{{ area_label }}</h3>
+        <h3 style="color: #8b93a1; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 8px;">{{ area_label }}</h3>
         <table style="margin-bottom: 12px;">
             <thead>
                 <tr>
@@ -47,7 +48,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="3" style="color: #6b7280;"><em>No items yet.</em></td></tr>
+                <tr><td colspan="3" style="color: #565d6b;"><em>No items yet.</em></td></tr>
                 {% endfor %}
             </tbody>
         </table>
