@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .eb-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+    @media (max-width: 900px) { .eb-layout { grid-template-columns: 1fr; } }
+    .eb-panel { background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; padding: 16px; }
+    .eb-mode-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+    .eb-mode-tabs button { background: #2a2e37; color: #9ca3af; border: none; padding: 8px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .eb-mode-tabs button.active { background: #b91c1c; color: white; }
+    .eb-block { border: 1px solid #2a2e37; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #14161b; }
+    .eb-block-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .eb-block-header strong { font-size: 12px; color: #9ca3af; text-transform: uppercase; }
+    .eb-field-row { display: flex; gap: 6px; margin-bottom: 6px; }
+    .eb-field-row input { flex: 1; }
+    .eb-small-btn { background: #2a2e37; color: #e5e5e5; border: none; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+    .eb-small-btn.danger { background: #7f1d1d; }
+    .eb-label { font-size: 11px; color: #6b7280; display: block; margin: 6px 0 3px; }
+    .eb-input, textarea.eb-input { width: 100%; padding: 7px 9px; background: #0f1115; border: 1px solid #2a2e37; border-radius: 4px; color: #e5e5e5; font-size: 12.5px; font-family: inherit; }
+    textarea.eb-input { resize: vertical; }
+    .eb-preview { background: #313338; border-radius: 8px; padding: 16px; font-family: -apple-system, sans-serif; font-size: 14px; color: #dbdee1; min-height: 100px; }
+    .eb-preview-embed { border-left: 4px solid #5865F2; background: #2b2d31; border-radius: 4px; padding: 10px 12px; margin-top: 6px; max-width: 520px; }
+    .eb-preview-embed img { max-width: 100%; border-radius: 4px; margin-top: 8px; }
+    #jsonOutput { width: 100%; min-height: 220px; font-family: monospace; font-size: 11.5px; }
+    .eb-webhook-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 12px; }
+</style>
+
+<p class="hint">
+    Build classic embeds or Components V2 messages, preview them, and send directly via a saved webhook.
+    Note: buttons here are Link-style only (open a URL) - buttons that trigger bot actions (give a role, etc.) need custom code, not just JSON.
+</p>
+
+<div class="eb-mode-tabs">
+    <button id="tabClassic" class="active" onclick="setMode('classic')">Classic Embeds</button>
+    <button id="tabV2" onclick="setMode('v2')">Components V2</button>
+</div>
+
+<div class="eb-layout">
+    <div class="eb-panel">
+        <div id="classicBuilder"></div>
+        <div id="v2Builder" style="display: none;"></div>
+        <button class="eb-small-btn" style="margin-top: 8px;" onclick="mode === 'classic' ? addEmbed() : addV2Block('text')">+ Add {{ 'Embed' }}</button>
+    </div>
+
+    <div>
+        <div class="eb-panel" style="margin-bottom: 12px;">
+            <strong style="font-size: 12px; color: #9ca3af; text-transform: uppercase;">Live Preview</strong>
+            <div class="eb-preview" id="previewArea" style="margin-top: 10px;"></div>
+        </div>
+
+        <div class="eb-panel">
+            <strong style="font-size: 12px; color: #9ca3af; text-transform: uppercase;">Send</strong>
+            <div style="margin-top: 10px;">
+                {% for wh in webhooks %}
+                <div class="eb-webhook-row">
+                    <input type="radio" name="webhookChoice" value="{{ wh.url }}" id="wh{{ loop.index }}" {{ 'checked' if loop.first }}>
+                    <label for="wh{{ loop.index }}">{{ wh.name }}</label>
+                    <form method="POST" action="{{ url_for('embed_builder_delete_webhook', index=loop.index0) }}" style="display: inline;" onsubmit="return confirm('Remove this webhook?');">
+                        <button type="submit" class="eb-small-btn danger" style="margin-left: auto;">×</button>
+                    </form>
+                </div>
+                {% else %}
+                <p class="hint">No webhooks saved yet - add one below.</p>
+                {% endfor %}
+            </div>
+            <button class="eb-small-btn" onclick="document.getElementById('sendBtn').click()" id="sendBtnVisible" style="margin-top: 10px;">Send to Discord</button>
+            <div id="sendResult" style="margin-top: 8px; font-size: 12px;"></div>
+
+            <details style="margin-top: 14px;">
+                <summary style="cursor: pointer; font-size: 12px; color: #9ca3af;">+ Add a webhook</summary>
+                <form method="POST" action="{{ url_for('embed_builder_add_webhook') }}" style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+                    <input class="eb-input" type="text" name="name" placeholder="Name (e.g. Announcements)" required>
+                    <input class="eb-input" type="text" name="url" placeholder="Webhook URL" required>
+                    <button type="submit" class="eb-small-btn">Save webhook</button>
+                </form>
+            </details>
+
+            <details style="margin-top: 14px;">
+                <summary style="cursor: pointer; font-size: 12px; color: #9ca3af;">View / Edit raw JSON</summary>
+                <textarea id="jsonOutput" class="eb-input" style="margin-top: 8px;"></textarea>
+                <button class="eb-small-btn" style="margin-top: 6px;" onclick="loadFromJson()">Load JSON into builder</button>
+                <button class="eb-small-btn" style="margin-top: 6px;" onclick="copyJson()">Copy JSON</button>
+            </details>
+        </div>
+    </div>
+</div>
+
+<button id="sendBtn" style="display:none;" onclick="sendToDiscord()"></button>
+
+<script>
+let mode = 'classic';
+let embeds = [{ title: '', description: '', color: '#5865F2', fields: [], footer: '', image: '', thumbnail: '' }];
+let v2Blocks = [{ type: 'text', content: 'Your text here...' }];
+
+function setMode(m) {
+    mode = m;
+    document.getElementById('tabClassic').classList.toggle('active', m === 'classic');
+    document.getElementById('tabV2').classList.toggle('active', m === 'v2');
+    document.getElementById('classicBuilder').style.display = m === 'classic' ? 'block' : 'none';
+    document.getElementById('v2Builder').style.display = m === 'v2' ? 'block' : 'none';
+    render();
+}
+
+function addEmbed() {
+    embeds.push({ title: '', description: '', color: '#5865F2', fields: [], footer: '', image: '', thumbnail: '' });
+    render();
+}
+function removeEmbed(i) { embeds.splice(i, 1); render(); }
+function addField(ei) { embeds[ei].fields.push({ name: '', value: '', inline: false }); render(); }
+function removeField(ei, fi) { embeds[ei].fields.splice(fi, 1); render(); }
+
+function addV2Block(type) {
+    if (type === 'text') v2Blocks.push({ type: 'text', content: '' });
+    if (type === 'separator') v2Blocks.push({ type: 'separator' });
+    if (type === 'button') v2Blocks.push({ type: 'button', label: 'Click me', url: '' });
+    if (type === 'image') v2Blocks.push({ type: 'image', url: '' });
+    render();
+}
+function removeV2Block(i) { v2Blocks.splice(i, 1); render(); }
+
+function buildClassicUI() {
+    const el = document.getElementById('classicBuilder');
+    el.innerHTML = '';
+    embeds.forEach((e, i) => {
+        const block = document.createElement('div');
+        block.className = 'eb-block';
+        block.innerHTML = `
+            <div class="eb-block-header">
+                <strong>Embed ${i + 1}</strong>
+                <button class="eb-small-btn danger" onclick="removeEmbed(${i})">Remove</button>
+            </div>
+            <label class="eb-label">Title</label>
+            <input class="eb-input" value="${e.title}" oninput="embeds[${i}].title=this.value; render()">
+            <label class="eb-label">Description</label>
+            <textarea class="eb-input" rows="3" oninput="embeds[${i}].description=this.value; render()">${e.description}</textarea>
+            <label class="eb-label">Color</label>
+            <input class="eb-input" type="color" value="${e.color}" style="height: 32px;" oninput="embeds[${i}].color=this.value; render()">
+            <label class="eb-label">Image URL</label>
+            <input class="eb-input" value="${e.image}" oninput="embeds[${i}].image=this.value; render()">
+            <label class="eb-label">Thumbnail URL</label>
+            <input class="eb-input" value="${e.thumbnail}" oninput="embeds[${i}].thumbnail=this.value; render()">
+            <label class="eb-label">Footer</label>
+            <input class="eb-input" value="${e.footer}" oninput="embeds[${i}].footer=this.value; render()">
+            <label class="eb-label">Fields</label>
+            <div id="fields-${i}"></div>
+            <button class="eb-small-btn" onclick="addField(${i})">+ Add field</button>
+        `;
+        el.appendChild(block);
+        const fieldsDiv = block.querySelector(`#fields-${i}`);
+        e.fields.forEach((f, fi) => {
+            const row = document.createElement('div');
+            row.className = 'eb-field-row';
+            row.innerHTML = `
+                <input class="eb-input" placeholder="Name" value="${f.name}" oninput="embeds[${i}].fields[${fi}].name=this.value; render()">
+                <input class="eb-input" placeholder="Value" value="${f.value}" oninput="embeds[${i}].fields[${fi}].value=this.value; render()">
+                <button class="eb-small-btn danger" onclick="removeField(${i},${fi})">×</button>
+            `;
+            fieldsDiv.appendChild(row);
+        });
+    });
+}
+
+function buildV2UI() {
+    const el = document.getElementById('v2Builder');
+    el.innerHTML = '<div class="eb-block-header" style="margin-bottom:10px;"><span></span></div>';
+    const addRow = document.createElement('div');
+    addRow.style.cssText = 'display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;';
+    addRow.innerHTML = `
+        <button class="eb-small-btn" onclick="addV2Block('text')">+ Text</button>
+        <button class="eb-small-btn" onclick="addV2Block('separator')">+ Separator</button>
+        <button class="eb-small-btn" onclick="addV2Block('button')">+ Button</button>
+        <button class="eb-small-btn" onclick="addV2Block('image')">+ Image</button>
+    `;
+    el.appendChild(addRow);
+
+    v2Blocks.forEach((b, i) => {
+        const block = document.createElement('div');
+        block.className = 'eb-block';
+        let inner = `<div class="eb-block-header"><strong>${b.type}</strong><button class="eb-small-btn danger" onclick="removeV2Block(${i})">Remove</button></div>`;
+        if (b.type === 'text') {
+            inner += `<textarea class="eb-input" rows="2" oninput="v2Blocks[${i}].content=this.value; render()">${b.content}</textarea>`;
+        } else if (b.type === 'button') {
+            inner += `<label class="eb-label">Label</label><input class="eb-input" value="${b.label}" oninput="v2Blocks[${i}].label=this.value; render()">
+                       <label class="eb-label">URL</label><input class="eb-input" value="${b.url}" oninput="v2Blocks[${i}].url=this.value; render()">`;
+        } else if (b.type === 'image') {
+            inner += `<label class="eb-label">Image URL</label><input class="eb-input" value="${b.url}" oninput="v2Blocks[${i}].url=this.value; render()">`;
+        }
+        block.innerHTML = inner;
+        el.appendChild(block);
+    });
+}
+
+function hexToInt(hex) { return parseInt(hex.replace('#', ''), 16); }
+
+function buildPayload() {
+    if (mode === 'classic') {
+        return {
+            embeds: embeds.map(e => {
+                const em = { color: hexToInt(e.color) };
+                if (e.title) em.title = e.title;
+                if (e.description) em.description = e.description;
+                if (e.footer) em.footer = { text: e.footer };
+                if (e.image) em.image = { url: e.image };
+                if (e.thumbnail) em.thumbnail = { url: e.thumbnail };
+                if (e.fields.length) em.fields = e.fields.map(f => ({ name: f.name, value: f.value, inline: false }));
+                return em;
+            })
+        };
+    } else {
+        const components = v2Blocks.map(b => {
+            if (b.type === 'text') return { type: 10, content: b.content };
+            if (b.type === 'separator') return { type: 14 };
+            if (b.type === 'button') return { type: 1, components: [{ type: 2, style: 5, label: b.label, url: b.url }] };
+            if (b.type === 'image') return { type: 12, items: [{ media: { url: b.url } }] };
+        });
+        return { flags: 32768, components: [{ type: 17, accent_color: 5793266, components }] };
+    }
+}
+
+function renderPreview() {
+    const payload = buildPayload();
+    const area = document.getElementById('previewArea');
+    if (mode === 'classic') {
+        area.innerHTML = (payload.embeds || []).map(e => `
+            <div class="eb-preview-embed" style="border-left-color: #${(e.color || 5793266).toString(16).padStart(6,'0')};">
+                ${e.title ? `<div style="font-weight:600;margin-bottom:4px;">${e.title}</div>` : ''}
+                ${e.description ? `<div style="font-size:13px;color:#dbdee1;white-space:pre-wrap;">${e.description}</div>` : ''}
+                ${(e.fields||[]).map(f => `<div style="margin-top:6px;"><div style="font-weight:600;font-size:12px;">${f.name}</div><div style="font-size:12px;color:#dbdee1;">${f.value}</div></div>`).join('')}
+                ${e.image ? `<img src="${e.image}">` : ''}
+                ${e.footer ? `<div style="font-size:11px;color:#949ba4;margin-top:8px;">${e.footer.text}</div>` : ''}
+            </div>
+        `).join('');
+    } else {
+        area.innerHTML = v2Blocks.map(b => {
+            if (b.type === 'text') return `<div style="white-space:pre-wrap;margin-bottom:6px;">${b.content}</div>`;
+            if (b.type === 'separator') return `<hr style="border-color:#3f4147;margin:8px 0;">`;
+            if (b.type === 'button') return `<a href="${b.url}" target="_blank" style="display:inline-block;background:#4e5058;color:white;padding:6px 14px;border-radius:4px;text-decoration:none;font-size:13px;margin-bottom:6px;">${b.label} ↗</a>`;
+            if (b.type === 'image') return b.url ? `<img src="${b.url}" style="max-width:100%;border-radius:4px;margin-bottom:6px;">` : '';
+        }).join('');
+    }
+}
+
+function render() {
+    if (mode === 'classic') buildClassicUI(); else buildV2UI();
+    renderPreview();
+    document.getElementById('jsonOutput').value = JSON.stringify(buildPayload(), null, 2);
+}
+
+function loadFromJson() {
+    try {
+        const payload = JSON.parse(document.getElementById('jsonOutput').value);
+        if (payload.embeds) {
+            mode = 'classic';
+            embeds = payload.embeds.map(e => ({
+                title: e.title || '', description: e.description || '',
+                color: '#' + (e.color || 5793266).toString(16).padStart(6, '0'),
+                fields: e.fields || [], footer: e.footer ? e.footer.text : '',
+                image: e.image ? e.image.url : '', thumbnail: e.thumbnail ? e.thumbnail.url : ''
+            }));
+            setMode('classic');
+        } else if (payload.components) {
+            mode = 'v2';
+            v2Blocks = (payload.components[0].components || []).map(c => {
+                if (c.type === 10) return { type: 'text', content: c.content };
+                if (c.type === 14) return { type: 'separator' };
+                if (c.type === 1) return { type: 'button', label: c.components[0].label, url: c.components[0].url };
+                if (c.type === 12) return { type: 'image', url: c.items[0].media.url };
+                return { type: 'text', content: '' };
+            });
+            setMode('v2');
+        }
+    } catch (e) {
+        alert('Invalid JSON: ' + e.message);
+    }
+}
+
+function copyJson() {
+    document.getElementById('jsonOutput').select();
+    document.execCommand('copy');
+}
+
+function sendToDiscord() {
+    const webhookRadio = document.querySelector('input[name="webhookChoice"]:checked');
+    const resultDiv = document.getElementById('sendResult');
+    if (!webhookRadio) {
+        resultDiv.innerHTML = '<span style="color:#f87171;">Add and select a webhook first.</span>';
+        return;
+    }
+    const payload = buildPayload();
+    resultDiv.innerHTML = '<span style="color:#9ca3af;">Sending...</span>';
+
+    const formData = new FormData();
+    formData.append('webhook_url', webhookRadio.value);
+    formData.append('payload', JSON.stringify(payload));
+
+    fetch("{{ url_for('embed_builder_send') }}", { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                resultDiv.innerHTML = '<span style="color:#86efac;">✅ Sent!</span>';
+            } else {
+                resultDiv.innerHTML = '<span style="color:#f87171;">❌ ' + data.error + '</span>';
+            }
+        })
+        .catch(e => { resultDiv.innerHTML = '<span style="color:#f87171;">❌ ' + e + '</span>'; });
+}
+
+render();
+</script>
+{% endblock %}
