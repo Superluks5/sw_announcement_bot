@@ -40,9 +40,11 @@ TOGGLES_FILE = os.path.join(BASE_DIR, "command_toggles.json")
 USAGE_FILE = os.path.join(BASE_DIR, "usage_data.json")
 ROADMAP_FILE = os.path.join(BASE_DIR, "roadmap_data.json")
 TASKBOARD_FILE = os.path.join(BASE_DIR, "taskboard_data.json")
+PARTNER_FILE = os.path.join(BASE_DIR, "partner_data.json")
 SERVER_CONFIG_FILE = os.path.join(BASE_DIR, "server_config.json")
 BOT_LOGS_FILE = os.path.join(BASE_DIR, "bot_logs.json")
 WEBHOOKS_FILE = os.path.join(BASE_DIR, "dashboard_webhooks.json")
+MAINTENANCE_FILE = os.path.join(BASE_DIR, "maintenance.json")
 
 # Every command in the bot, grouped by module for the permissions page.
 # Keep in sync when new commands/cogs are added.
@@ -611,6 +613,81 @@ def embed_builder_send():
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}, 500
+
+
+# ---------- partners ----------
+
+def load_partners() -> dict:
+    return load_json(PARTNER_FILE, {"partners": [], "channel_id": None, "message_id": None})
+
+
+def save_partners(data: dict):
+    save_json(PARTNER_FILE, data)
+
+
+@app.route("/partners")
+@login_required
+def partners_page():
+    data = load_partners()
+    partners = [{**p, "id": i} for i, p in enumerate(data["partners"])]
+    return render_template(
+        "partners.html",
+        username=session.get("username"),
+        active_tab="partners",
+        partners=partners,
+    )
+
+
+@app.route("/partners/add", methods=["POST"])
+@login_required
+def partners_add():
+    data = load_partners()
+    data["partners"].append({
+        "name": request.form["name"].strip(),
+        "link": request.form["link"].strip(),
+        "note": request.form.get("note", "").strip(),
+    })
+    save_partners(data)
+    flash("Partner added.", "success")
+    return redirect(url_for("partners_page"))
+
+
+@app.route("/partners/<int:partner_id>/remove", methods=["POST"])
+@login_required
+def partners_remove(partner_id):
+    data = load_partners()
+    if 0 <= partner_id < len(data["partners"]):
+        data["partners"].pop(partner_id)
+        save_partners(data)
+        flash("Partner removed.", "success")
+    return redirect(url_for("partners_page"))
+
+
+# ---------- maintenance mode ----------
+
+@app.route("/maintenance", methods=["GET", "POST"])
+@login_required
+def maintenance_page():
+    config = load_json(MAINTENANCE_FILE, {"enabled": False, "allowed_user_id": None})
+
+    if request.method == "POST":
+        enabled = "enabled" in request.form
+        allowed_user_id = request.form.get("allowed_user_id", "").strip() or session.get("user_id")
+        save_json(MAINTENANCE_FILE, {"enabled": enabled, "allowed_user_id": allowed_user_id})
+        flash(
+            "Maintenance mode ON - every command is now blocked for everyone except the exempt user." if enabled
+            else "Maintenance mode OFF - normal permissions restored.",
+            "success" if not enabled else "error",
+        )
+        return redirect(url_for("maintenance_page"))
+
+    return render_template(
+        "maintenance.html",
+        username=session.get("username"),
+        active_tab="maintenance",
+        config=config,
+        my_user_id=session.get("user_id"),
+    )
 
 
 # ---------- bot control ----------
