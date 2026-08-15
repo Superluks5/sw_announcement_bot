@@ -1,21 +1,22 @@
 {% extends "base.html" %}
+{% block page_title %}🧩 Embed Builder{% endblock %}
 {% block content %}
 <style>
     .eb-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
     @media (max-width: 900px) { .eb-layout { grid-template-columns: 1fr; } }
-    .eb-panel { background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; padding: 16px; }
+    .eb-panel { background: #14161b; border: 1px solid #262a33; border-radius: 8px; padding: 16px; }
     .eb-mode-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
-    .eb-mode-tabs button { background: #2a2e37; color: #9ca3af; border: none; padding: 8px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; }
-    .eb-mode-tabs button.active { background: #b91c1c; color: white; }
-    .eb-block { border: 1px solid #2a2e37; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #14161b; }
+    .eb-mode-tabs button { background: #262a33; color: #8b93a1; border: none; padding: 8px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    .eb-mode-tabs button.active { background: #dc2626; color: white; }
+    .eb-block { border: 1px solid #262a33; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #14161b; }
     .eb-block-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .eb-block-header strong { font-size: 12px; color: #9ca3af; text-transform: uppercase; }
+    .eb-block-header strong { font-size: 12px; color: #8b93a1; text-transform: uppercase; }
     .eb-field-row { display: flex; gap: 6px; margin-bottom: 6px; }
     .eb-field-row input { flex: 1; }
-    .eb-small-btn { background: #2a2e37; color: #e5e5e5; border: none; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+    .eb-small-btn { background: #262a33; color: #e5e5e5; border: none; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; }
     .eb-small-btn.danger { background: #7f1d1d; }
-    .eb-label { font-size: 11px; color: #6b7280; display: block; margin: 6px 0 3px; }
-    .eb-input, textarea.eb-input { width: 100%; padding: 7px 9px; background: #0f1115; border: 1px solid #2a2e37; border-radius: 4px; color: #e5e5e5; font-size: 12.5px; font-family: inherit; }
+    .eb-label { font-size: 11px; color: #565d6b; display: block; margin: 6px 0 3px; }
+    .eb-input, textarea.eb-input { width: 100%; padding: 7px 9px; background: #0a0b0e; border: 1px solid #262a33; border-radius: 4px; color: #e5e5e5; font-size: 12.5px; font-family: inherit; }
     textarea.eb-input { resize: vertical; }
     .eb-preview { background: #313338; border-radius: 8px; padding: 16px; font-family: -apple-system, sans-serif; font-size: 14px; color: #dbdee1; min-height: 100px; }
     .eb-preview-embed { border-left: 4px solid #5865F2; background: #2b2d31; border-radius: 4px; padding: 10px 12px; margin-top: 6px; max-width: 520px; }
@@ -43,12 +44,12 @@
 
     <div>
         <div class="eb-panel" style="margin-bottom: 12px;">
-            <strong style="font-size: 12px; color: #9ca3af; text-transform: uppercase;">Live Preview</strong>
+            <strong style="font-size: 12px; color: #8b93a1; text-transform: uppercase;">Live Preview</strong>
             <div class="eb-preview" id="previewArea" style="margin-top: 10px;"></div>
         </div>
 
         <div class="eb-panel">
-            <strong style="font-size: 12px; color: #9ca3af; text-transform: uppercase;">Send</strong>
+            <strong style="font-size: 12px; color: #8b93a1; text-transform: uppercase;">Send</strong>
             <div style="margin-top: 10px;">
                 {% for wh in webhooks %}
                 <div class="eb-webhook-row">
@@ -66,7 +67,7 @@
             <div id="sendResult" style="margin-top: 8px; font-size: 12px;"></div>
 
             <details style="margin-top: 14px;">
-                <summary style="cursor: pointer; font-size: 12px; color: #9ca3af;">+ Add a webhook</summary>
+                <summary style="cursor: pointer; font-size: 12px; color: #8b93a1;">+ Add a webhook</summary>
                 <form method="POST" action="{{ url_for('embed_builder_add_webhook') }}" style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px;">
                     <input class="eb-input" type="text" name="name" placeholder="Name (e.g. Announcements)" required>
                     <input class="eb-input" type="text" name="url" placeholder="Webhook URL" required>
@@ -75,7 +76,7 @@
             </details>
 
             <details style="margin-top: 14px;">
-                <summary style="cursor: pointer; font-size: 12px; color: #9ca3af;">View / Edit raw JSON</summary>
+                <summary style="cursor: pointer; font-size: 12px; color: #8b93a1;">View / Edit raw JSON</summary>
                 <textarea id="jsonOutput" class="eb-input" style="margin-top: 8px;"></textarea>
                 <button class="eb-small-btn" style="margin-top: 6px;" onclick="loadFromJson()">Load JSON into builder</button>
                 <button class="eb-small-btn" style="margin-top: 6px;" onclick="copyJson()">Copy JSON</button>
@@ -286,7 +287,7 @@ function sendToDiscord() {
         return;
     }
     const payload = buildPayload();
-    resultDiv.innerHTML = '<span style="color:#9ca3af;">Sending...</span>';
+    resultDiv.innerHTML = '<span style="color:#8b93a1;">Sending...</span>';
 
     const formData = new FormData();
     formData.append('webhook_url', webhookRadio.value);
