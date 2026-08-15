@@ -17,7 +17,7 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from permissions import is_command_allowed, load_config, is_command_enabled, load_toggles
+from permissions import is_command_allowed, load_config, is_command_enabled, load_toggles, is_maintenance_blocking, load_maintenance
 
 load_dotenv()
 
@@ -75,7 +75,12 @@ class PermissionedTree(app_commands.CommandTree):
             return True
 
         command_name = interaction.command.qualified_name if interaction.command else None
-        if command_name and not is_command_enabled(command_name):
+
+        if isinstance(interaction.user, discord.Member) and is_maintenance_blocking(interaction.user.id):
+            await interaction.response.send_message(
+                "🔧 The bot is currently under maintenance. Try again shortly.", ephemeral=True
+            )
+        elif command_name and not is_command_enabled(command_name):
             await interaction.response.send_message(
                 "🚫 This command is currently disabled.", ephemeral=True
             )
@@ -108,6 +113,7 @@ async def on_ready():
 
     load_config()  # creates permissions_config.json now if it doesn't exist yet
     load_toggles()  # creates command_toggles.json now if it doesn't exist yet
+    load_maintenance()  # creates maintenance.json now if it doesn't exist yet
     print("✅ permissions_config.json ready")
 
     try:
