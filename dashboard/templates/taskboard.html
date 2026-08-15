@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block page_title %}📋 Taskboard{% endblock %}
 {% block content %}
         <p class="hint">Shared taskboard, grouped per person. Syncs with Discord within a few seconds either way.</p>
 
@@ -14,7 +15,7 @@
         </form>
 
         {% for assignee_id, tasks in by_assignee.items() %}
-        <h3 style="color: #9ca3af; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 8px;">
+        <h3 style="color: #8b93a1; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 8px;">
             👤 {{ member_names.get(assignee_id|string, 'Unknown (' ~ assignee_id ~ ')') }}
         </h3>
         <table style="margin-bottom: 12px;">
