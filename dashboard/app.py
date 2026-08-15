@@ -182,6 +182,17 @@ def login_required(view):
 
 # ---------- public landing ----------
 
+@app.context_processor
+def inject_globals():
+    """Makes the live bot status available in the header on every page
+    without needing to pass it from each individual route."""
+    try:
+        status = get_service_status("swbot")
+    except Exception:
+        status = {"active": None}
+    return {"global_bot_status": status}
+
+
 @app.route("/")
 def landing():
     return render_template("landing.html", bot_name=BOT_NAME)
