@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
+        <h2 style="font-size: 14px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 12px;">Last 7 Days</h2>
+        <div style="background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; padding: 16px; margin-bottom: 28px;">
+            <canvas id="usageChart" height="80"></canvas>
+        </div>
+
         <h2 style="font-size: 14px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 12px;">Command Usage</h2>
 
         {% if top_commands %}
@@ -54,4 +59,27 @@
                 <div style="font-size: 12px; color: #9ca3af;">Coming soon.</div>
             </div>
         </div>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+        <script>
+        new Chart(document.getElementById('usageChart'), {
+            type: 'bar',
+            data: {
+                labels: {{ chart_labels|tojson }},
+                datasets: [{
+                    label: 'Commands used',
+                    data: {{ chart_values|tojson }},
+                    backgroundColor: '#b91c1c',
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
+                    y: { beginAtZero: true, ticks: { color: '#9ca3af', precision: 0 }, grid: { color: '#2a2e37' } }
+                }
+            }
+        });
+        </script>
 {% endblock %}
