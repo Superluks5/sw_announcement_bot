@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% block page_title %}🛰️ Overview{% endblock %}
 {% block content %}
-        <h2 style="font-size: 14px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 12px;">Last 7 Days</h2>
-        <div style="background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; padding: 16px; margin-bottom: 28px;">
+        <h2 style="font-size: 13px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.8px; margin: 0 0 12px;">Last 7 Days</h2>
+        <div class="hud-panel" style="margin-bottom: 28px;">
             <canvas id="usageChart" height="80"></canvas>
         </div>
 
-        <h2 style="font-size: 14px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 12px;">Command Usage</h2>
+        <h2 style="font-size: 13px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.8px; margin: 0 0 12px;">Command Usage</h2>
 
         {% if top_commands %}
         <table style="margin-bottom: 28px;">
@@ -21,7 +22,7 @@
                 <tr>
                     <td style="font-family: monospace;">/{{ cmd }}</td>
                     <td>{{ stats.count }}</td>
-                    <td style="color: #9ca3af;">{{ stats.last_used_display }}</td>
+                    <td style="color: var(--text-dim);">{{ stats.last_used_display }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -30,33 +31,47 @@
         <p class="hint" style="margin-bottom: 28px;">No commands used yet since tracking started.</p>
         {% endif %}
 
-        <h2 style="font-size: 14px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 12px;">Modules</h2>
+        <h2 style="font-size: 13px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.8px; margin: 0 0 12px;">Modules</h2>
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
-            <a href="{{ url_for('permissions_page') }}" style="text-decoration: none; color: inherit;">
-                <div style="background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; padding: 18px; height: 100%;">
-                    <div style="font-size: 22px; margin-bottom: 8px;">🔐</div>
-                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">Permissions</div>
-                    <div style="font-size: 12px; color: #9ca3af;">Control who can use each command, and enable/disable them entirely.</div>
+            <a href="{{ url_for('permissions_page') }}" class="hud-panel-link">
+                <div class="hud-panel" style="height: 100%;">
+                    <div style="font-size: 24px; margin-bottom: 8px;">🔐</div>
+                    <div style="font-weight: 600; font-size: 14.5px; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif;">Permissions</div>
+                    <div style="font-size: 12px; color: var(--text-dim);">Control who can use each command, and enable/disable them entirely.</div>
                 </div>
             </a>
-            <a href="{{ url_for('roadmap_page') }}" style="text-decoration: none; color: inherit;">
-                <div style="background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; padding: 18px; height: 100%;">
-                    <div style="font-size: 22px; margin-bottom: 8px;">🗺️</div>
-                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">Roadmap</div>
-                    <div style="font-size: 12px; color: #9ca3af;">Add, move, and remove roadmap items.</div>
+            <a href="{{ url_for('roadmap_page') }}" class="hud-panel-link">
+                <div class="hud-panel" style="height: 100%;">
+                    <div style="font-size: 24px; margin-bottom: 8px;">🗺️</div>
+                    <div style="font-weight: 600; font-size: 14.5px; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif;">Roadmap</div>
+                    <div style="font-size: 12px; color: var(--text-dim);">Add, move, and remove roadmap items.</div>
                 </div>
             </a>
-            <a href="{{ url_for('taskboard_page') }}" style="text-decoration: none; color: inherit;">
-                <div style="background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; padding: 18px; height: 100%;">
-                    <div style="font-size: 22px; margin-bottom: 8px;">📋</div>
-                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">Taskboard</div>
-                    <div style="font-size: 12px; color: #9ca3af;">Assign, update, and remove tasks per person.</div>
+            <a href="{{ url_for('taskboard_page') }}" class="hud-panel-link">
+                <div class="hud-panel" style="height: 100%;">
+                    <div style="font-size: 24px; margin-bottom: 8px;">📋</div>
+                    <div style="font-weight: 600; font-size: 14.5px; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif;">Taskboard</div>
+                    <div style="font-size: 12px; color: var(--text-dim);">Assign, update, and remove tasks per person.</div>
                 </div>
             </a>
-            <div style="background: #14161b; border: 1px dashed #2a2e37; border-radius: 8px; padding: 18px; opacity: 0.5;">
-                <div style="font-size: 22px; margin-bottom: 8px;">🤝</div>
-                <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">Partners</div>
-                <div style="font-size: 12px; color: #9ca3af;">Coming soon.</div>
+            <a href="{{ url_for('embed_builder_page') }}" class="hud-panel-link">
+                <div class="hud-panel" style="height: 100%;">
+                    <div style="font-size: 24px; margin-bottom: 8px;">🧩</div>
+                    <div style="font-weight: 600; font-size: 14.5px; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif;">Embed Builder</div>
+                    <div style="font-size: 12px; color: var(--text-dim);">Build and send embeds via webhook.</div>
+                </div>
+            </a>
+            <a href="{{ url_for('server_config_page') }}" class="hud-panel-link">
+                <div class="hud-panel" style="height: 100%;">
+                    <div style="font-size: 24px; margin-bottom: 8px;">⚙️</div>
+                    <div style="font-weight: 600; font-size: 14.5px; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif;">Server Config</div>
+                    <div style="font-size: 12px; color: var(--text-dim);">Welcome/leave messages and auto-role.</div>
+                </div>
+            </a>
+            <div class="hud-panel" style="opacity: 0.45;">
+                <div style="font-size: 24px; margin-bottom: 8px;">🤝</div>
+                <div style="font-weight: 600; font-size: 14.5px; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif;">Partners</div>
+                <div style="font-size: 12px; color: var(--text-dim);">Coming soon.</div>
             </div>
         </div>
 
@@ -69,15 +84,15 @@
                 datasets: [{
                     label: 'Commands used',
                     data: {{ chart_values|tojson }},
-                    backgroundColor: '#b91c1c',
+                    backgroundColor: '#dc2626',
                     borderRadius: 4,
                 }]
             },
             options: {
                 plugins: { legend: { display: false } },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
-                    y: { beginAtZero: true, ticks: { color: '#9ca3af', precision: 0 }, grid: { color: '#2a2e37' } }
+                    x: { grid: { display: false }, ticks: { color: '#8b93a1' } },
+                    y: { beginAtZero: true, ticks: { color: '#8b93a1', precision: 0 }, grid: { color: '#262a33' } }
                 }
             }
         });
