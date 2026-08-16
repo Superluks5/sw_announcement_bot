@@ -5,3 +5,4 @@ python-dotenv
 tzdata
 flask
 requests
+SQLAlchemy>=2.0
