@@ -18,3 +18,8 @@ usage_data.json
 server_config.json
 bot_logs.json
 maintenance.json
+
+# Economy database - live data, per-machine, never synced via git
+economy/economy.db
+economy/economy.db-wal
+economy/economy.db-shm
