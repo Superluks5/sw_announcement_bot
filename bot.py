@@ -142,9 +142,24 @@ async def load_cogs():
             except Exception as e:
                 print(f"⚠️ Failed to load {cog_name}: {e}")
 
+    economy_cogs_dir = os.path.join(os.path.dirname(__file__), "economy", "cogs")
+    if os.path.isdir(economy_cogs_dir):
+        for filename in os.listdir(economy_cogs_dir):
+            if filename.endswith(".py") and not filename.startswith("_"):
+                cog_name = f"economy.cogs.{filename[:-3]}"
+                try:
+                    await bot.load_extension(cog_name)
+                    print(f"✅ Loaded cog: {cog_name}")
+                except Exception as e:
+                    print(f"⚠️ Failed to load {cog_name}: {e}")
+
 
 async def main():
     async with bot:
+        from economy.db import init_db
+        init_db()
+        print("✅ Economy database ready")
+
         await load_cogs()
         await bot.start(DISCORD_TOKEN)
 
