@@ -6,6 +6,7 @@ dashboard home (usage analytics + module cards) -> per-module pages.
 """
 
 import os
+import sys
 import json
 import time
 import subprocess
@@ -18,6 +19,13 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from dotenv import load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BASE_DIR)  # so `import economy...` resolves from this file too
+
+from economy.services import permission_service as ps
+from economy.services import balance_service as bs
+from economy.db import init_db as economy_init_db
+
+economy_init_db()  # safe to call every startup - additive, never drops tables
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 app = Flask(__name__)
@@ -486,6 +494,128 @@ def taskboard_remove(task_id):
         save_taskboard(data)
         flash("Removed.", "success")
     return redirect(url_for("taskboard_page"))
+
+
+def fetch_member_role_ids(user_id: str) -> list[int]:
+    """Roles for one specific member - used by the Test Permission tool.
+    Not cached since it's only called on-demand, not on every page load."""
+    if not DISCORD_TOKEN:
+        return []
+    try:
+        resp = requests.get(
+            f"https://discord.com/api/v10/guilds/{GUILD_ID}/members/{user_id}",
+            headers={"Authorization": f"Bot {DISCORD_TOKEN}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return [int(r) for r in resp.json().get("roles", [])]
+    except Exception as e:
+        print(f"⚠️ Failed to fetch member roles: {e}")
+        return []
+
+
+# ---------- economy permissions ----------
+
+@app.route("/economy/permissions", methods=["GET"])
+@login_required
+def economy_permissions_page():
+    rules = ps.list_rules(int(GUILD_ID))
+    roles = fetch_guild_roles()
+    members = fetch_guild_members()
+    channels = fetch_guild_channels()
+    role_names = {str(r["id"]): r["name"] for r in roles}
+    member_names = {str(m["id"]): m["name"] for m in members}
+    channel_names = {str(c["id"]): c["name"] for c in channels}
+
+    def label_for(rule):
+        names = {"user": member_names, "role": role_names, "channel": channel_names}.get(rule.target_type, {})
+        return names.get(str(rule.target_id), f"ID {rule.target_id}")
+
+    rule_rows = [{"rule": r, "target_label": label_for(r)} for r in rules]
+    role_presets = ps.get_role_presets(int(GUILD_ID))
+
+    return render_template(
+        "economy_permissions.html",
+        username=session.get("username"),
+        active_tab="economy_permissions",
+        rule_rows=rule_rows,
+        roles=roles,
+        members=members,
+        channels=channels,
+        role_presets=role_presets,
+        role_names=role_names,
+        preset_names=list(ps.PRESETS.keys()),
+        admin_commands=sorted(ps.ECONOMY_ADMIN_COMMANDS),
+    )
+
+
+@app.route("/economy/permissions/add-rule", methods=["POST"])
+@login_required
+def economy_add_rule():
+    target_type = request.form["target_type"]
+    target_id = int(request.form["target_id"])
+    rule_type = request.form["rule_type"]
+    command_or_category = request.form["command_or_category"]
+    effect = request.form["effect"]
+
+    ps.add_rule(int(GUILD_ID), rule_type, target_type, target_id, command_or_category, effect, int(session["user_id"]))
+    flash("Rule added.", "success")
+    return redirect(url_for("economy_permissions_page"))
+
+
+@app.route("/economy/permissions/remove-rule/<int:rule_id>", methods=["POST"])
+@login_required
+def economy_remove_rule(rule_id):
+    ps.remove_rule(int(GUILD_ID), rule_id, int(session["user_id"]))
+    flash("Rule removed.", "success")
+    return redirect(url_for("economy_permissions_page"))
+
+
+@app.route("/economy/permissions/apply-preset", methods=["POST"])
+@login_required
+def economy_apply_preset():
+    role_id = int(request.form["role_id"])
+    preset_name = request.form["preset_name"]
+    ps.apply_preset(int(GUILD_ID), role_id, preset_name, int(session["user_id"]))
+    flash(f"Applied '{preset_name}' to the role.", "success")
+    return redirect(url_for("economy_permissions_page"))
+
+
+@app.route("/economy/permissions/test", methods=["GET", "POST"])
+@login_required
+def economy_permission_test_page():
+    result = None
+    if request.method == "POST":
+        member_id = int(request.form["member_id"])
+        command = request.form["command"]
+        channel_id = request.form.get("channel_id")
+        role_ids = fetch_member_role_ids(str(member_id))
+        result = ps.check_permission(
+            int(GUILD_ID), member_id, role_ids, command,
+            channel_id=int(channel_id) if channel_id else None,
+        )
+
+    return render_template(
+        "economy_permission_test.html",
+        username=session.get("username"),
+        active_tab="economy_permissions",
+        members=fetch_guild_members(),
+        channels=fetch_guild_channels(),
+        commands=sorted(ps.ECONOMY_ADMIN_COMMANDS) + ["balance", "pay", "deposit", "withdraw"],
+        result=result,
+    )
+
+
+@app.route("/economy/audit-log")
+@login_required
+def economy_audit_log_page():
+    logs = ps.get_audit_log(int(GUILD_ID))
+    return render_template(
+        "economy_audit_log.html",
+        username=session.get("username"),
+        active_tab="economy_permissions",
+        logs=logs,
+    )
 
 
 # ---------- server config ----------
