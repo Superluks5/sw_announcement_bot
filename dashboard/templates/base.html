@@ -236,6 +236,9 @@
             <div class="nav-group-label">Overview</div>
             <a href="{{ url_for('dashboard_home') }}" class="nav-item {{ 'active' if active_tab == 'home' }}"><span class="icon">🛰️</span> Dashboard</a>
 
+            <div class="nav-group-label">Economy</div>
+            <a href="{{ url_for('economy_permissions_page') }}" class="nav-item {{ 'active' if active_tab == 'economy_permissions' }}"><span class="icon">🔐</span> Permissions</a>
+
             <div class="nav-group-label">Modules</div>
             <a href="{{ url_for('permissions_page') }}" class="nav-item {{ 'active' if active_tab == 'permissions' }}"><span class="icon">🔐</span> Permissions</a>
             <a href="{{ url_for('roadmap_page') }}" class="nav-item {{ 'active' if active_tab == 'roadmap' }}"><span class="icon">🗺️</span> Roadmap</a>
