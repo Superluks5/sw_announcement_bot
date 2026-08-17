@@ -128,3 +128,19 @@ class Cooldown(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     command: Mapped[str] = mapped_column(String(50))
     expires_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class GameConfig(Base):
+    """Per-game, per-server settings - min/max bet, cooldown, enabled.
+    Auto-created with sensible defaults the first time a game is played on
+    a server (see games_service.get_game_config)."""
+    __tablename__ = "game_config"
+    __table_args__ = (UniqueConstraint("guild_id", "game", name="uq_game_config"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    game: Mapped[str] = mapped_column(String(30))  # "coinflip" | "dice" | "rps" | "slots" | "roulette" | "blackjack"
+    min_bet: Mapped[int] = mapped_column(BigInteger, default=10)
+    max_bet: Mapped[int] = mapped_column(BigInteger, default=10_000)
+    cooldown_seconds: Mapped[int] = mapped_column(Integer, default=3)
+    enabled: Mapped[bool] = mapped_column(default=True)

@@ -23,6 +23,7 @@ sys.path.insert(0, BASE_DIR)  # so `import economy...` resolves from this file t
 
 from economy.services import permission_service as ps
 from economy.services import balance_service as bs
+from economy.services import games_service as gsvc
 from economy.db import init_db as economy_init_db
 
 economy_init_db()  # safe to call every startup - additive, never drops tables
@@ -615,6 +616,32 @@ def economy_audit_log_page():
         username=session.get("username"),
         active_tab="economy_permissions",
         logs=logs,
+    )
+
+
+# ---------- games config ----------
+
+@app.route("/economy/games", methods=["GET", "POST"])
+@login_required
+def economy_games_page():
+    if request.method == "POST":
+        for game in gsvc.DEFAULT_CONFIGS:
+            gsvc.set_game_config(
+                int(GUILD_ID), game,
+                min_bet=int(request.form.get(f"min_bet_{game}", 10)),
+                max_bet=int(request.form.get(f"max_bet_{game}", 10000)),
+                cooldown_seconds=int(request.form.get(f"cooldown_{game}", 3)),
+                enabled=f"enabled_{game}" in request.form,
+            )
+        flash("Game settings saved - takes effect immediately.", "success")
+        return redirect(url_for("economy_games_page"))
+
+    configs = gsvc.list_game_configs(int(GUILD_ID))
+    return render_template(
+        "economy_games.html",
+        username=session.get("username"),
+        active_tab="economy_games",
+        configs=configs,
     )
 
 

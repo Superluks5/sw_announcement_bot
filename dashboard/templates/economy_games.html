@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block page_title %}🎲 Games Config{% endblock %}
+{% block content %}
+        <p class="hint">Min/max bet, cooldown, and enable/disable per game. Takes effect immediately, no restart needed.</p>
+
+        <form method="POST">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Game</th><th>Min Bet</th><th>Max Bet</th><th>Cooldown (s)</th><th>Enabled</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in configs %}
+                    <tr>
+                        <td style="font-family: monospace; text-transform: capitalize;">/{{ c.game }}</td>
+                        <td><input type="text" name="min_bet_{{ c.game }}" value="{{ c.min_bet }}" style="width: 90px;"></td>
+                        <td><input type="text" name="max_bet_{{ c.game }}" value="{{ c.max_bet }}" style="width: 100px;"></td>
+                        <td><input type="text" name="cooldown_{{ c.game }}" value="{{ c.cooldown_seconds }}" style="width: 60px;"></td>
+                        <td><input type="checkbox" name="enabled_{{ c.game }}" {{ 'checked' if c.enabled }}></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div style="margin-top: 16px;">
+                <button type="submit">Save all changes</button>
+            </div>
+        </form>
+{% endblock %}
