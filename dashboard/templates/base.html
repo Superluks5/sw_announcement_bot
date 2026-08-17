@@ -89,6 +89,14 @@
             max-width: 1200px; margin: 0 auto 22px; flex-wrap: wrap; gap: 10px;
         }
         .hud-title { font-size: 20px; }
+        .hamburger-btn {
+            display: none;
+            width: 34px; height: 34px; border-radius: 6px; background: var(--panel-alt);
+            border: 1px solid var(--border); color: var(--text-dim); cursor: pointer;
+            font-size: 16px; align-items: center; justify-content: center;
+        }
+        .hamburger-btn:hover { background: #21252d; border-color: var(--border-bright); }
+        .sidebar-backdrop { display: none; }
         .hud-right { display: flex; align-items: center; gap: 10px; position: relative; }
         .menu-btn {
             width: 34px; height: 34px; border-radius: 6px; background: var(--panel-alt);
@@ -201,25 +209,32 @@
         /* ---------- mobile ---------- */
         @media (max-width: 860px) {
             .shell { flex-direction: column; }
+            .hamburger-btn { display: flex; }
+
             .sidebar {
-                position: fixed; bottom: 0; left: 0; right: 0; top: auto;
-                width: 100%; height: 62px; z-index: 30;
-                display: flex; align-items: center; justify-content: space-around;
-                padding: 0 4px; border-right: none; border-top: 1px solid var(--border);
-                overflow-x: auto; -webkit-overflow-scrolling: touch;
+                position: fixed; top: 0; left: 0; bottom: 0; height: 100vh;
+                width: 260px; z-index: 40;
+                transform: translateX(-100%);
+                transition: transform 0.25s ease;
+                overflow-y: auto;
+                box-shadow: 4px 0 24px rgba(0,0,0,0.5);
             }
-            .sidebar-brand, .nav-group-label { display: none; }
-            .nav-item {
-                flex-direction: column; gap: 2px; padding: 6px 10px; white-space: nowrap;
-                font-size: 9.5px; margin-bottom: 0; flex-shrink: 0;
+            .sidebar.open { transform: translateX(0); }
+
+            .sidebar-backdrop {
+                display: block;
+                position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+                z-index: 35; opacity: 0; pointer-events: none;
+                transition: opacity 0.25s ease;
             }
-            .nav-item .icon { font-size: 18px; }
+            .sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
+
             .nav-item.active::before {
-                left: 50%; top: 2px; transform: translateX(-50%) scaleX(0);
-                width: 60%; height: 2px; animation: navInMobile 0.25s ease forwards;
+                left: -12px; top: 50%; transform: translateY(-50%) scaleY(1);
+                width: 3px; height: 60%;
             }
-            @keyframes navInMobile { to { transform: translateX(-50%) scaleX(1); } }
-            .main { padding: 14px 14px 84px; }
+
+            .main { padding: 14px 14px 32px; }
             table { font-size: 12px; }
             th, td { padding: 8px 6px; }
             button, .btn { padding: 12px 18px; font-size: 14px; }
@@ -237,26 +252,31 @@
             <a href="{{ url_for('dashboard_home') }}" class="nav-item {{ 'active' if active_tab == 'home' }}"><span class="icon">🛰️</span> Dashboard</a>
 
             <div class="nav-group-label">Economy</div>
-            <a href="{{ url_for('economy_permissions_page') }}" class="nav-item {{ 'active' if active_tab == 'economy_permissions' }}"><span class="icon">🔐</span> Permissions</a>
-            <a href="{{ url_for('economy_games_page') }}" class="nav-item {{ 'active' if active_tab == 'economy_games' }}"><span class="icon">🎲</span> Games Config</a>
+            <a href="{{ url_for('economy_permissions_page') }}" class="nav-item {{ 'active' if active_tab == 'economy_permissions' }}" onclick="closeSidebar()"><span class="icon">💰</span> Economy Perms</a>
+            <a href="{{ url_for('economy_games_page') }}" class="nav-item {{ 'active' if active_tab == 'economy_games' }}" onclick="closeSidebar()"><span class="icon">🎲</span> Games Config</a>
 
             <div class="nav-group-label">Modules</div>
-            <a href="{{ url_for('permissions_page') }}" class="nav-item {{ 'active' if active_tab == 'permissions' }}"><span class="icon">🔐</span> Permissions</a>
-            <a href="{{ url_for('roadmap_page') }}" class="nav-item {{ 'active' if active_tab == 'roadmap' }}"><span class="icon">🗺️</span> Roadmap</a>
-            <a href="{{ url_for('taskboard_page') }}" class="nav-item {{ 'active' if active_tab == 'taskboard' }}"><span class="icon">📋</span> Taskboard</a>
-            <a href="{{ url_for('partners_page') }}" class="nav-item {{ 'active' if active_tab == 'partners' }}"><span class="icon">🤝</span> Partners</a>
-            <a href="{{ url_for('embed_builder_page') }}" class="nav-item {{ 'active' if active_tab == 'embed_builder' }}"><span class="icon">🧩</span> Embed Builder</a>
+            <a href="{{ url_for('permissions_page') }}" class="nav-item {{ 'active' if active_tab == 'permissions' }}" onclick="closeSidebar()"><span class="icon">🔐</span> Bot Perms</a>
+            <a href="{{ url_for('roadmap_page') }}" class="nav-item {{ 'active' if active_tab == 'roadmap' }}" onclick="closeSidebar()"><span class="icon">🗺️</span> Roadmap</a>
+            <a href="{{ url_for('taskboard_page') }}" class="nav-item {{ 'active' if active_tab == 'taskboard' }}" onclick="closeSidebar()"><span class="icon">📋</span> Taskboard</a>
+            <a href="{{ url_for('partners_page') }}" class="nav-item {{ 'active' if active_tab == 'partners' }}" onclick="closeSidebar()"><span class="icon">🤝</span> Partners</a>
+            <a href="{{ url_for('embed_builder_page') }}" class="nav-item {{ 'active' if active_tab == 'embed_builder' }}" onclick="closeSidebar()"><span class="icon">🧩</span> Embed Builder</a>
 
             <div class="nav-group-label">System</div>
-            <a href="{{ url_for('server_config_page') }}" class="nav-item {{ 'active' if active_tab == 'server_config' }}"><span class="icon">⚙️</span> Server Config</a>
-            <a href="{{ url_for('logs_page') }}" class="nav-item {{ 'active' if active_tab == 'logs' }}"><span class="icon">📜</span> Logs</a>
-            <a href="{{ url_for('control_page') }}" class="nav-item {{ 'active' if active_tab == 'control' }}"><span class="icon">🖥️</span> Bot Control</a>
-            <a href="{{ url_for('maintenance_page') }}" class="nav-item {{ 'active' if active_tab == 'maintenance' }}"><span class="icon">🔧</span> Maintenance</a>
+            <a href="{{ url_for('server_config_page') }}" class="nav-item {{ 'active' if active_tab == 'server_config' }}" onclick="closeSidebar()"><span class="icon">⚙️</span> Server Config</a>
+            <a href="{{ url_for('logs_page') }}" class="nav-item {{ 'active' if active_tab == 'logs' }}" onclick="closeSidebar()"><span class="icon">📜</span> Logs</a>
+            <a href="{{ url_for('control_page') }}" class="nav-item {{ 'active' if active_tab == 'control' }}" onclick="closeSidebar()"><span class="icon">🖥️</span> Bot Control</a>
+            <a href="{{ url_for('maintenance_page') }}" class="nav-item {{ 'active' if active_tab == 'maintenance' }}" onclick="closeSidebar()"><span class="icon">🔧</span> Maintenance</a>
         </nav>
+
+        <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
 
         <main class="main">
             <div class="hud-bar">
-                <h1 class="hud-title">{% block page_title %}{% endblock %}</h1>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button class="menu-btn hamburger-btn" onclick="openSidebar(event)" aria-label="Open menu">☰</button>
+                    <h1 class="hud-title">{% block page_title %}{% endblock %}</h1>
+                </div>
                 <div class="hud-right">
                     <button class="menu-btn" onclick="toggleMenu(event)" aria-label="Menu">⋮</button>
                     <div class="dropdown" id="headerDropdown">
@@ -279,6 +299,16 @@
             document.addEventListener('click', () => {
                 document.getElementById('headerDropdown').classList.remove('open');
             });
+
+            function openSidebar(e) {
+                e.stopPropagation();
+                document.querySelector('.sidebar').classList.add('open');
+                document.getElementById('sidebarBackdrop').classList.add('open');
+            }
+            function closeSidebar() {
+                document.querySelector('.sidebar').classList.remove('open');
+                document.getElementById('sidebarBackdrop').classList.remove('open');
+            }
             </script>
 
             <div class="container">
