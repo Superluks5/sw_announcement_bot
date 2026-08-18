@@ -24,6 +24,7 @@ sys.path.insert(0, BASE_DIR)  # so `import economy...` resolves from this file t
 from economy.services import permission_service as ps
 from economy.services import balance_service as bs
 from economy.services import games_service as gsvc
+from economy.services import income_service as isvc
 from economy.db import init_db as economy_init_db
 
 economy_init_db()  # safe to call every startup - additive, never drops tables
@@ -643,6 +644,111 @@ def economy_games_page():
         active_tab="economy_games",
         configs=configs,
     )
+
+
+# ---------- income config ----------
+
+@app.route("/economy/income", methods=["GET", "POST"])
+@login_required
+def economy_income_page():
+    if request.method == "POST":
+        for cmd in isvc.DEFAULT_INCOME_CONFIGS:
+            isvc.set_income_config(
+                int(GUILD_ID), cmd,
+                min_payout=int(request.form.get(f"min_{cmd}", 0)),
+                max_payout=int(request.form.get(f"max_{cmd}", 0)),
+                cooldown_seconds=int(request.form.get(f"cooldown_{cmd}", 3600)),
+                success_chance=float(request.form.get(f"chance_{cmd}", 1.0)),
+                fine_amount=int(request.form.get(f"fine_{cmd}", 0)),
+                enabled=f"enabled_{cmd}" in request.form,
+            )
+        flash("Income settings saved - takes effect immediately.", "success")
+        return redirect(url_for("economy_income_page"))
+
+    configs = isvc.list_income_configs(int(GUILD_ID))
+    return render_template(
+        "economy_income.html",
+        username=session.get("username"),
+        active_tab="economy_income",
+        configs=configs,
+    )
+
+
+@app.route("/economy/chat-money", methods=["GET", "POST"])
+@login_required
+def economy_chat_money_page():
+    if request.method == "POST":
+        isvc.set_chat_money_config(
+            int(GUILD_ID),
+            enabled="enabled" in request.form,
+            min_amount=int(request.form.get("min_amount", 1)),
+            max_amount=int(request.form.get("max_amount", 5)),
+            cooldown_seconds=int(request.form.get("cooldown_seconds", 60)),
+            excluded_channels=",".join(request.form.getlist("excluded_channels")),
+            excluded_roles=",".join(request.form.getlist("excluded_roles")),
+        )
+        flash("Chat money settings saved.", "success")
+        return redirect(url_for("economy_chat_money_page"))
+
+    config = isvc.get_chat_money_config(int(GUILD_ID))
+    return render_template(
+        "economy_chat_money.html",
+        username=session.get("username"),
+        active_tab="economy_income",
+        config=config,
+        channels=fetch_guild_channels(),
+        roles=fetch_guild_roles(),
+        excluded_channel_ids=set(config.excluded_channels.split(",")) if config.excluded_channels else set(),
+        excluded_role_ids=set(config.excluded_roles.split(",")) if config.excluded_roles else set(),
+    )
+
+
+@app.route("/economy/role-income", methods=["GET"])
+@login_required
+def economy_role_income_page():
+    from economy.db import SessionLocal
+    from economy.models import RoleIncome
+    with SessionLocal() as db_session:
+        rules = db_session.query(RoleIncome).filter_by(guild_id=int(GUILD_ID)).all()
+    return render_template(
+        "economy_role_income.html",
+        username=session.get("username"),
+        active_tab="economy_income",
+        rules=rules,
+        roles=fetch_guild_roles(),
+    )
+
+
+@app.route("/economy/role-income/add", methods=["POST"])
+@login_required
+def economy_role_income_add():
+    from economy.db import SessionLocal
+    from economy.models import RoleIncome
+    with SessionLocal() as db_session:
+        db_session.add(RoleIncome(
+            guild_id=int(GUILD_ID),
+            role_id=int(request.form["role_id"]),
+            amount=int(request.form["amount"]),
+            interval_hours=int(request.form["interval_hours"]),
+            enabled=True,
+        ))
+        db_session.commit()
+    flash("Role income rule added.", "success")
+    return redirect(url_for("economy_role_income_page"))
+
+
+@app.route("/economy/role-income/<int:rule_id>/remove", methods=["POST"])
+@login_required
+def economy_role_income_remove(rule_id):
+    from economy.db import SessionLocal
+    from economy.models import RoleIncome
+    with SessionLocal() as db_session:
+        rule = db_session.query(RoleIncome).filter_by(id=rule_id, guild_id=int(GUILD_ID)).one_or_none()
+        if rule:
+            db_session.delete(rule)
+            db_session.commit()
+    flash("Role income rule removed.", "success")
+    return redirect(url_for("economy_role_income_page"))
 
 
 # ---------- server config ----------

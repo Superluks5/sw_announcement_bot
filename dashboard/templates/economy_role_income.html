@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block page_title %}🎭 Role Income{% endblock %}
+{% block content %}
+        <p class="hint">Members with these roles automatically get paid on the interval, checked every 30 minutes.</p>
+
+        <form method="POST" action="{{ url_for('economy_role_income_add') }}" style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+            <select name="role_id" required>
+                {% for r in roles %}<option value="{{ r.id }}">{{ r.name }}</option>{% endfor %}
+            </select>
+            <input type="text" name="amount" placeholder="Amount" required style="width: 100px;">
+            <input type="text" name="interval_hours" placeholder="Every X hours" required style="width: 120px;">
+            <button type="submit">+ Add Rule</button>
+        </form>
+
+        <table>
+            <thead><tr><th>Role</th><th>Amount</th><th>Interval</th><th></th></tr></thead>
+            <tbody>
+                {% for rule in rules %}
+                <tr>
+                    <td>&lt;@&amp;{{ rule.role_id }}&gt;</td>
+                    <td>{{ rule.amount }}</td>
+                    <td>Every {{ rule.interval_hours }}h</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('economy_role_income_remove', rule_id=rule.id) }}" onsubmit="return confirm('Remove this rule?');">
+                            <button type="submit" class="btn-small" style="background: var(--red-dim);">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="color: var(--text-faint);"><em>No role income rules yet.</em></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+{% endblock %}

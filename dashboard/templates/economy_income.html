@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block page_title %}💼 Income Config{% endblock %}
+{% block content %}
+        <p class="hint">Work/crime/rob payouts, cooldowns, success chance, and fines. Takes effect immediately.</p>
+
+        <form method="POST">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Command</th><th>Min</th><th>Max</th><th>Cooldown (s)</th><th>Success %</th><th>Fine</th><th>On</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in configs %}
+                    <tr>
+                        <td style="font-family: monospace;">/{{ c.command }}</td>
+                        <td><input type="text" name="min_{{ c.command }}" value="{{ c.min_payout }}" style="width: 80px;"></td>
+                        <td><input type="text" name="max_{{ c.command }}" value="{{ c.max_payout }}" style="width: 80px;"></td>
+                        <td><input type="text" name="cooldown_{{ c.command }}" value="{{ c.cooldown_seconds }}" style="width: 80px;"></td>
+                        <td><input type="text" name="chance_{{ c.command }}" value="{{ c.success_chance }}" style="width: 60px;"></td>
+                        <td><input type="text" name="fine_{{ c.command }}" value="{{ c.fine_amount }}" style="width: 70px;"></td>
+                        <td><input type="checkbox" name="enabled_{{ c.command }}" {{ 'checked' if c.enabled }}></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p class="hint">Success % is a decimal (1.0 = always succeeds, 0.6 = 60% chance). Cooldown is in seconds (4 hours = 14400).</p>
+            <button type="submit">Save all changes</button>
+        </form>
+
+        <div style="margin-top: 20px; display: flex; gap: 10px;">
+            <a href="{{ url_for('economy_chat_money_page') }}" class="btn btn-secondary">💬 Chat Money</a>
+            <a href="{{ url_for('economy_role_income_page') }}" class="btn btn-secondary">🎭 Role Income</a>
+        </div>
+{% endblock %}

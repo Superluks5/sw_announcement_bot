@@ -144,3 +144,63 @@ class GameConfig(Base):
     max_bet: Mapped[int] = mapped_column(BigInteger, default=10_000)
     cooldown_seconds: Mapped[int] = mapped_column(Integer, default=3)
     enabled: Mapped[bool] = mapped_column(default=True)
+
+
+class IncomeConfig(Base):
+    """Per-command, per-server income settings (work/crime/rob)."""
+    __tablename__ = "income_config"
+    __table_args__ = (UniqueConstraint("guild_id", "command", name="uq_income_config"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    command: Mapped[str] = mapped_column(String(20))  # "work" | "crime" | "rob"
+    min_payout: Mapped[int] = mapped_column(BigInteger, default=20)
+    max_payout: Mapped[int] = mapped_column(BigInteger, default=250)
+    cooldown_seconds: Mapped[int] = mapped_column(Integer, default=14400)  # 4 hours
+    success_chance: Mapped[float] = mapped_column(default=1.0)  # 1.0 = always succeeds (work); crime/rob use less
+    fine_amount: Mapped[int] = mapped_column(BigInteger, default=0)  # paid on failure, for crime/rob
+    enabled: Mapped[bool] = mapped_column(default=True)
+
+
+class DailyStreak(Base):
+    """Tracks streak state for /daily and /weekly separately from the
+    generic Cooldown table, since streak logic (grace window, reset on
+    miss) is different from a flat cooldown."""
+    __tablename__ = "daily_streaks"
+    __table_args__ = (UniqueConstraint("guild_id", "user_id", "command", name="uq_daily_streak"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    command: Mapped[str] = mapped_column(String(10))  # "daily" | "weekly"
+    streak: Mapped[int] = mapped_column(Integer, default=0)
+    last_claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ChatMoneyConfig(Base):
+    """Passive per-message income settings. excluded_channels/excluded_roles
+    are stored as comma-separated ID strings - simple and sufficient at
+    this scale, avoids a whole extra join table for Phase 4."""
+    __tablename__ = "chat_money_config"
+
+    guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(default=False)  # opt-in, off by default
+    min_amount: Mapped[int] = mapped_column(Integer, default=1)
+    max_amount: Mapped[int] = mapped_column(Integer, default=5)
+    cooldown_seconds: Mapped[int] = mapped_column(Integer, default=60)
+    excluded_channels: Mapped[str] = mapped_column(String(500), default="")
+    excluded_roles: Mapped[str] = mapped_column(String(500), default="")
+
+
+class RoleIncome(Base):
+    """@VIP -> 500 every 12 hours, etc. Granted by a periodic background
+    task (see economy/cogs/income.py), not on-demand."""
+    __tablename__ = "role_income"
+    __table_args__ = (UniqueConstraint("guild_id", "role_id", name="uq_role_income"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    role_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    amount: Mapped[int] = mapped_column(BigInteger)
+    interval_hours: Mapped[int] = mapped_column(Integer, default=12)
+    enabled: Mapped[bool] = mapped_column(default=True)

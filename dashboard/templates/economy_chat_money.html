@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block page_title %}💬 Chat Money{% endblock %}
+{% block content %}
+        <p class="hint">Small random payout per message, with a cooldown. Off by default.</p>
+
+        <form method="POST" class="hud-panel" style="max-width: 500px; display: flex; flex-direction: column; gap: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                <input type="checkbox" name="enabled" {{ 'checked' if config.enabled }}> Enabled
+            </label>
+
+            <label style="font-size: 12px; color: var(--text-dim);">Min amount</label>
+            <input type="text" name="min_amount" value="{{ config.min_amount }}">
+
+            <label style="font-size: 12px; color: var(--text-dim);">Max amount</label>
+            <input type="text" name="max_amount" value="{{ config.max_amount }}">
+
+            <label style="font-size: 12px; color: var(--text-dim);">Cooldown (seconds)</label>
+            <input type="text" name="cooldown_seconds" value="{{ config.cooldown_seconds }}">
+
+            <label style="font-size: 12px; color: var(--text-dim);">Excluded channels</label>
+            <select name="excluded_channels" multiple style="height: 100px;">
+                {% for c in channels %}
+                <option value="{{ c.id }}" {{ 'selected' if c.id|string in excluded_channel_ids }}>#{{ c.name }}</option>
+                {% endfor %}
+            </select>
+
+            <label style="font-size: 12px; color: var(--text-dim);">Excluded roles</label>
+            <select name="excluded_roles" multiple style="height: 100px;">
+                {% for r in roles %}
+                <option value="{{ r.id }}" {{ 'selected' if r.id|string in excluded_role_ids }}>{{ r.name }}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit">Save</button>
+        </form>
+{% endblock %}
