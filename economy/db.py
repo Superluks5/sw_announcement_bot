@@ -39,8 +39,37 @@ class Base(DeclarativeBase):
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
 
 
+def _ensure_guild_registry_columns():
+    """Backfill schema for older SQLite databases created before the owner panel
+    added per-server bot control fields. This is intentionally lightweight and
+    safe to run on every startup."""
+    with engine.begin() as conn:
+        table_exists = conn.exec_driver_sql(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='guild_registry'"
+        ).fetchone()
+        if not table_exists:
+            return
+
+        columns = [
+            row[1]
+            for row in conn.exec_driver_sql("PRAGMA table_info(guild_registry)").fetchall()
+        ]
+
+        if "bot_mode" not in columns:
+            conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN bot_mode VARCHAR(20) DEFAULT 'shared'")
+        if "bot_enabled" not in columns:
+            conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN bot_enabled BOOLEAN DEFAULT 1")
+        if "note" not in columns:
+            conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN note VARCHAR(500)")
+        if "decided_at" not in columns:
+            conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN decided_at DATETIME")
+        if "decided_by" not in columns:
+            conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN decided_by BIGINT")
+
+
 def init_db():
-    """Creates all tables that don't exist yet. Safe to call every startup -
-    never drops or alters existing tables."""
+    """Creates all tables that don't exist yet and upgrades older SQLite
+    schemas in-place. Safe to call every startup."""
     import economy.models  # noqa: F401 - ensures models are registered before create_all
     Base.metadata.create_all(engine)
+    _ensure_guild_registry_columns()
