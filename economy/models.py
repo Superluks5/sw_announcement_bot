@@ -223,6 +223,7 @@ class GuildRegistry(Base):
     owner_discord_name: Mapped[str] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(20), default="pending")
     bot_mode: Mapped[str] = mapped_column(String(20), default="shared")
+    bot_enabled: Mapped[bool] = mapped_column(default=True)  # super-admin kill switch per server, independent of approval status
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     requested_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

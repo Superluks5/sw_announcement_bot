@@ -131,6 +131,53 @@ async def on_ready():
         print(f"⚠️ Failed to sync commands: {e}")
 
 
+@bot.event
+async def on_guild_join(guild: discord.Guild):
+    """
+    Fires whenever someone invites this bot to a new server. Since the bot
+    currently only actually SERVES one hardcoded GUILD_ID (real multi-guild
+    data-scoping is a bigger piece of work not built yet), the safe thing
+    to do for any OTHER server is: register a pending access request (same
+    as the web /request-access flow), DM the server owner explaining that,
+    and leave - rather than staying and running commands that would
+    silently mix another server's data into this one's files/database rows.
+
+    Once real per-guild scoping exists, this can be changed to stay and
+    idle instead of leaving.
+    """
+    if guild.id == GUILD_ID:
+        return  # this is the one real server this bot instance is meant for
+
+    import sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from economy.services import registry_service as reg
+
+    owner = guild.owner or (await guild.fetch_member(guild.owner_id) if guild.owner_id else None)
+    owner_name = str(owner) if owner else "Unknown"
+    owner_id = guild.owner_id or 0
+
+    entry = reg.auto_register_pending(guild.id, guild.name, owner_id, owner_name)
+
+    dashboard_url = os.environ.get("DASHBOARD_PUBLIC_URL", "the dashboard")
+    dm_text = (
+        f"👋 Thanks for adding **{bot.user.name}** to **{guild.name}**!\n\n"
+        f"This bot requires approval before it can be used here. "
+        f"Your request has been submitted automatically"
+        + (f" - you can check its status or add a note at {dashboard_url}" if dashboard_url != "the dashboard" else "")
+        + f".\n\nThe bot will leave this server for now and rejoin automatically once approved."
+    )
+
+    if owner:
+        try:
+            await owner.send(dm_text)
+        except discord.Forbidden:
+            pass  # owner has DMs disabled - the pending request still exists for them to find via the dashboard
+
+    await send_log(f"📥 New server tried to add the bot: **{guild.name}** (owner: {owner_name}) - registered as pending and left.")
+
+    await guild.leave()
+
+
 async def load_cogs():
     cogs_dir = os.path.join(os.path.dirname(__file__), "cogs")
     for filename in os.listdir(cogs_dir):

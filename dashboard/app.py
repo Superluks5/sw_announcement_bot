@@ -853,25 +853,74 @@ def request_access_page():
     )
 
 
-@app.route("/admin/requests")
+@app.route("/owner/servers")
 @super_admin_required
-def admin_requests_page():
+def owner_servers_page():
     return render_template(
-        "admin_requests.html",
+        "owner_servers.html",
         username=session.get("username"),
-        active_tab="admin_requests",
-        requests_list=reg.list_all(),
+        active_tab="owner_servers",
+        servers=reg.list_all(),
     )
 
 
-@app.route("/admin/requests/<int:registry_id>/decide", methods=["POST"])
+def send_discord_dm(user_id: int, content: str) -> bool:
+    """Sends a DM using the bot's own token via plain REST calls - no
+    running bot process needed for this, just the token. Best-effort:
+    returns False (and doesn't raise) if the user has DMs disabled or
+    anything else goes wrong, since this should never block an approve/deny
+    action from completing."""
+    if not DISCORD_TOKEN:
+        return False
+    try:
+        dm_resp = requests.post(
+            "https://discord.com/api/v10/users/@me/channels",
+            headers={"Authorization": f"Bot {DISCORD_TOKEN}"},
+            json={"recipient_id": str(user_id)},
+            timeout=10,
+        )
+        if dm_resp.status_code != 200:
+            return False
+        channel_id = dm_resp.json()["id"]
+        msg_resp = requests.post(
+            f"https://discord.com/api/v10/channels/{channel_id}/messages",
+            headers={"Authorization": f"Bot {DISCORD_TOKEN}"},
+            json={"content": content},
+            timeout=10,
+        )
+        return msg_resp.status_code == 200
+    except Exception as e:
+        print(f"⚠️ Failed to send Discord DM: {e}")
+        return False
+
+
+@app.route("/owner/servers/<int:registry_id>/decide", methods=["POST"])
 @super_admin_required
-def admin_requests_decide(registry_id):
+def owner_decide(registry_id):
     approve = request.form.get("decision") == "approve"
     entry = reg.decide(registry_id, approve, int(session["user_id"]))
     if entry:
         flash(f"{'Approved' if approve else 'Denied'} {entry.guild_name}.", "success")
-    return redirect(url_for("admin_requests_page"))
+        if approve:
+            dm_text = (
+                f"✅ Your request for **{entry.guild_name}** has been approved! "
+                f"Log back into the dashboard to manage it."
+            )
+        else:
+            dm_text = f"❌ Your request for **{entry.guild_name}** was denied."
+        send_discord_dm(entry.owner_discord_id, dm_text)
+    return redirect(url_for("owner_servers_page"))
+
+
+@app.route("/owner/servers/<int:registry_id>/toggle-enabled", methods=["POST"])
+@super_admin_required
+def owner_toggle_enabled(registry_id):
+    entries = reg.list_all()
+    entry = next((e for e in entries if e.id == registry_id), None)
+    if entry:
+        reg.set_bot_enabled(registry_id, not entry.bot_enabled)
+        flash(f"{'Enabled' if not entry.bot_enabled else 'Disabled'} the bot for {entry.guild_name}.", "success")
+    return redirect(url_for("owner_servers_page"))
 
 
 # ---------- server config ----------

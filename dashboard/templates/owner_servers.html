@@ -1,0 +1,44 @@
+{% extends "owner_base.html" %}
+{% block page_title %}🌐 Servers{% endblock %}
+{% block content %}
+        <p class="hint">Every community that's requested or been given access to the shared bot.</p>
+
+        <table>
+            <thead>
+                <tr><th>Server</th><th>Owner</th><th>Status</th><th>Bot</th><th>Requested</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for r in servers %}
+                <tr>
+                    <td>{{ r.guild_name }}<br><span style="color: var(--text-faint); font-size: 11px;">ID: {{ r.guild_id }}</span>{% if r.note %}<br><span style="color: var(--text-faint); font-size: 11px; font-style: italic;">{{ r.note }}</span>{% endif %}</td>
+                    <td>{{ r.owner_discord_name }}</td>
+                    <td style="color: {{ '#86efac' if r.status == 'approved' else ('#fca5a5' if r.status == 'denied' else '#f2d78a') }};">{{ r.status|upper }}</td>
+                    <td>
+                        {% if r.status == 'approved' %}
+                        <span style="color: {{ '#86efac' if r.bot_enabled else '#fca5a5' }};">{{ 'ON' if r.bot_enabled else 'OFF' }}</span>
+                        {% else %}
+                        <span style="color: var(--text-faint);">-</span>
+                        {% endif %}
+                    </td>
+                    <td style="color: var(--text-faint); font-size: 11px;">{{ r.requested_at.strftime('%b %d, %H:%M') }}</td>
+                    <td style="white-space: nowrap;">
+                        {% if r.status == 'pending' %}
+                        <form method="POST" action="{{ url_for('owner_decide', registry_id=r.id) }}" style="display: inline;">
+                            <button type="submit" name="decision" value="approve">Approve</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('owner_decide', registry_id=r.id) }}" style="display: inline;">
+                            <button type="submit" name="decision" value="deny" class="btn-danger">Deny</button>
+                        </form>
+                        {% elif r.status == 'approved' %}
+                        <form method="POST" action="{{ url_for('owner_toggle_enabled', registry_id=r.id) }}" style="display: inline;">
+                            <button type="submit" class="btn-secondary">{{ 'Disable' if r.bot_enabled else 'Enable' }}</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" style="color: var(--text-faint);"><em>No servers yet.</em></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+{% endblock %}
