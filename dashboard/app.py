@@ -41,7 +41,9 @@ BOT_NAME = os.environ.get("BOT_NAME", "Imperial Command System")
 DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET")
 DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI", "http://localhost:5000/callback")
-BOT_INVITE_PERMISSIONS = os.environ.get("BOT_INVITE_PERMISSIONS", "0")
+# Discord's Administrator permission bit. Override this with a narrower
+# permission integer in .env if the public bot should not be an administrator.
+BOT_INVITE_PERMISSIONS = os.environ.get("BOT_INVITE_PERMISSIONS", "8")
 
 ALLOWED_USER_IDS = {
     uid.strip() for uid in os.environ.get("DASHBOARD_ALLOWED_USER_IDS", "").split(",") if uid.strip()

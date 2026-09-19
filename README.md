@@ -21,11 +21,10 @@ Groq's free AI API, formats it using your server template, and posts it.
 3. **Configure:**
    - Rename `.env.example` to `.env`
    - Fill in `DISCORD_TOKEN`, `GROQ_API_KEY`, and `SERVER_NAME`
-   - For the dashboard approval flow, optionally set
-     `BOT_INVITE_PERMISSIONS` to the permissions integer from the public bot's
-     OAuth2 URL Generator (for example, permissions that allow the bot to send
-     messages and use slash commands). The approval link identifies the bot
-     directly from `DISCORD_TOKEN`, so it will not accidentally invite a DEV bot.
+    - The dashboard approval link grants Administrator by default. Set
+       `BOT_INVITE_PERMISSIONS` to a different permissions integer if the public
+       bot should use narrower permissions. The link identifies the bot directly
+       from `DISCORD_TOKEN`, so it will not accidentally invite a DEV bot.
 
 4. **Install and run:**
    ```
