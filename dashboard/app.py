@@ -41,6 +41,7 @@ BOT_NAME = os.environ.get("BOT_NAME", "Imperial Command System")
 DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET")
 DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI", "http://localhost:5000/callback")
+BOT_INVITE_PERMISSIONS = os.environ.get("BOT_INVITE_PERMISSIONS", "0")
 
 ALLOWED_USER_IDS = {
     uid.strip() for uid in os.environ.get("DASHBOARD_ALLOWED_USER_IDS", "").split(",") if uid.strip()
@@ -894,6 +895,22 @@ def send_discord_dm(user_id: int, content: str) -> bool:
         return False
 
 
+def bot_invite_url() -> str | None:
+    """Build the owner-facing OAuth2 URL needed to add the bot again.
+
+    Discord requires a server administrator to authorize a bot invite; the
+    bot token cannot accept an invite on its own.
+    """
+    if not DISCORD_CLIENT_ID:
+        return None
+    params = urlencode({
+        "client_id": DISCORD_CLIENT_ID,
+        "scope": "bot applications.commands",
+        "permissions": BOT_INVITE_PERMISSIONS,
+    })
+    return f"https://discord.com/oauth2/authorize?{params}"
+
+
 @app.route("/owner/servers/<int:registry_id>/decide", methods=["POST"])
 @super_admin_required
 def owner_decide(registry_id):
@@ -902,9 +919,12 @@ def owner_decide(registry_id):
     if entry:
         flash(f"{'Approved' if approve else 'Denied'} {entry.guild_name}.", "success")
         if approve:
+            invite_url = bot_invite_url()
             dm_text = (
                 f"✅ Your request for **{entry.guild_name}** has been approved! "
-                f"Log back into the dashboard to manage it."
+                f"To add the bot back to your server, use this link and select **{entry.guild_name}**:\n"
+                f"{invite_url or 'The bot invite link is not configured; please contact an administrator.'}\n\n"
+                f"After Discord confirms the authorization, log back into the dashboard to manage it."
             )
         else:
             dm_text = f"❌ Your request for **{entry.guild_name}** was denied."

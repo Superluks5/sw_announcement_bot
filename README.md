@@ -21,6 +21,10 @@ Groq's free AI API, formats it using your server template, and posts it.
 3. **Configure:**
    - Rename `.env.example` to `.env`
    - Fill in `DISCORD_TOKEN`, `GROQ_API_KEY`, and `SERVER_NAME`
+   - For the dashboard approval flow, also set `DISCORD_CLIENT_ID` and
+     optionally `BOT_INVITE_PERMISSIONS` to the permissions integer from the
+     bot's OAuth2 URL Generator (for example, permissions that allow the bot
+     to send messages and use slash commands)
 
 4. **Install and run:**
    ```
@@ -31,6 +35,12 @@ Groq's free AI API, formats it using your server template, and posts it.
 5. In Discord, type `/announce` in any channel the bot can see. A form pops up
    asking for your draft, announcement number, name, and rank. You'll get a
    preview with a "Post to channel" button before anything goes live.
+
+When a server access request is approved in the dashboard, the server
+administrator receives a DM with a bot invite link. Discord requires that
+administrator to click the link and authorize the bot; the bot token cannot
+accept an invite silently. After the authorization completes, the bot stays
+in the approved server instead of leaving again.
 
 ## Hosting it 24/7
 

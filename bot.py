@@ -152,6 +152,11 @@ async def on_guild_join(guild: discord.Guild):
     sys.path.insert(0, os.path.dirname(__file__))
     from economy.services import registry_service as reg
 
+    existing = reg.get_request_for_guild(guild.id)
+    if existing and existing.status == "approved" and existing.bot_enabled:
+        await send_log(f"✅ Rejoined approved server: **{guild.name}**.")
+        return
+
     owner = guild.owner or (await guild.fetch_member(guild.owner_id) if guild.owner_id else None)
     owner_name = str(owner) if owner else "Unknown"
     owner_id = guild.owner_id or 0
