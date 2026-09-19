@@ -23,9 +23,8 @@ load_dotenv()
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 
-# Defaults to your real server. Add GUILD_ID=your_test_server_id to a
-# local .env (never commit it) to point a dev/test bot at a different
-# server without touching this file.
+# Optional legacy/primary server. Approved servers are discovered from the
+# guild registry and synced below, so this is no longer the only server.
 GUILD_ID = int(os.environ.get("GUILD_ID", 1535372103593894028))
 
 # Optional - add LOG_WEBHOOK_URL=... to your .env to get bot startup/error
@@ -106,6 +105,39 @@ intents.members = True  # required so {@name} placeholders can find users, not j
 bot = commands.Bot(command_prefix="!", intents=intents, tree_cls=PermissionedTree)
 
 
+async def sync_approved_guild_commands():
+    """Register the loaded slash commands in every approved server.
+
+    Guild-scoped registration makes commands available immediately and avoids
+    relying on Discord's much slower global-command propagation.
+    """
+    import sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from economy.services import registry_service as reg
+
+    guild_ids = {GUILD_ID}
+    guild_ids.update(entry.guild_id for entry in reg.list_all() if entry.status == "approved" and entry.bot_enabled)
+
+    total = 0
+    synced_guilds = 0
+    for guild_id in guild_ids:
+        if bot.get_guild(guild_id) is None:
+            print(f"⚠️ Skipping command sync for guild {guild_id}: bot is not a member")
+            continue
+        guild = discord.Object(id=guild_id)
+        bot.tree.copy_global_to(guild=guild)
+        synced = await bot.tree.sync(guild=guild)
+        total += len(synced)
+        synced_guilds += 1
+        print(f"✅ Synced {len(synced)} slash command(s) to guild {guild_id}")
+
+    # Remove any global commands left by an older one-server deployment.
+    bot.tree.clear_commands(guild=None)
+    await bot.tree.sync()
+
+    return synced_guilds, total
+
+
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
@@ -117,16 +149,8 @@ async def on_ready():
     print("✅ permissions_config.json ready")
 
     try:
-        guild = discord.Object(id=GUILD_ID)
-
-        # Register commands to your server first (while they're still in memory)
-        bot.tree.copy_global_to(guild=guild)
-        synced = await bot.tree.sync(guild=guild)
-        print(f"✅ Synced {len(synced)} slash command(s) to your server (instant)")
-
-        # Now clear any old GLOBAL commands from previous syncs (removes duplicates)
-        bot.tree.clear_commands(guild=None)
-        await bot.tree.sync()
+        guild_count, command_count = await sync_approved_guild_commands()
+        print(f"✅ Synced {command_count} command registration(s) across {guild_count} server(s)")
     except Exception as e:
         print(f"⚠️ Failed to sync commands: {e}")
 
@@ -134,19 +158,11 @@ async def on_ready():
 @bot.event
 async def on_guild_join(guild: discord.Guild):
     """
-    Fires whenever someone invites this bot to a new server. Since the bot
-    currently only actually SERVES one hardcoded GUILD_ID (real multi-guild
-    data-scoping is a bigger piece of work not built yet), the safe thing
-    to do for any OTHER server is: register a pending access request (same
-    as the web /request-access flow), DM the server owner explaining that,
-    and leave - rather than staying and running commands that would
-    silently mix another server's data into this one's files/database rows.
-
-    Once real per-guild scoping exists, this can be changed to stay and
-    idle instead of leaving.
+    New servers must be approved before the bot stays. Approved servers get
+    their guild-scoped slash commands synced immediately after rejoining.
     """
     if guild.id == GUILD_ID:
-        return  # this is the one real server this bot instance is meant for
+        return  # preserve the legacy/primary server behavior
 
     import sys
     sys.path.insert(0, os.path.dirname(__file__))
@@ -154,7 +170,10 @@ async def on_guild_join(guild: discord.Guild):
 
     existing = reg.get_request_for_guild(guild.id)
     if existing and existing.status == "approved" and existing.bot_enabled:
+        bot.tree.copy_global_to(guild=discord.Object(id=guild.id))
+        synced = await bot.tree.sync(guild=discord.Object(id=guild.id))
         await send_log(f"✅ Rejoined approved server: **{guild.name}**.")
+        print(f"✅ Synced {len(synced)} slash command(s) to rejoined guild {guild.id}")
         return
 
     owner = guild.owner or (await guild.fetch_member(guild.owner_id) if guild.owner_id else None)

@@ -2,10 +2,8 @@
 Guild registry service.
 ------------------------------------------
 Manages the request -> approve/deny flow for communities wanting to use the
-shared bot's dashboard. Platform-wide, used by the dashboard only (the bot
-process itself doesn't need this yet - it still just runs on one hardcoded
-GUILD_ID until the guild-scoping work extends to every cog, which is a
-separate, larger follow-up).
+shared bot's dashboard. The bot uses this registry to discover approved
+servers for command registration.
 """
 
 from economy.db import SessionLocal

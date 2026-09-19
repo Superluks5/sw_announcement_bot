@@ -21,6 +21,8 @@ Groq's free AI API, formats it using your server template, and posts it.
 3. **Configure:**
    - Rename `.env.example` to `.env`
    - Fill in `DISCORD_TOKEN`, `GROQ_API_KEY`, and `SERVER_NAME`
+   - `GUILD_ID` is optional and keeps one legacy/primary server registered;
+     additional servers are loaded from the approved-server registry
     - The dashboard approval link grants Administrator by default. Set
        `BOT_INVITE_PERMISSIONS` to a different permissions integer if the public
        bot should use narrower permissions. The link identifies the bot directly
@@ -40,7 +42,8 @@ When a server access request is approved in the dashboard, the server
 administrator receives a DM with a bot invite link. Discord requires that
 administrator to click the link and authorize the bot; the bot token cannot
 accept an invite silently. After the authorization completes, the bot stays
-in the approved server instead of leaving again.
+in the approved server instead of leaving again. On startup, slash commands
+are synced separately to the primary server and every approved server.
 
 ## Hosting it 24/7
 
