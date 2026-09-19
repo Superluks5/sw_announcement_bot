@@ -7,6 +7,8 @@
             .status-pending { color: #f2d78a; }
             .bot-on { color: #86efac; }
             .bot-off { color: #fca5a5; }
+            .btn-remove { background: #7f1d1d; }
+            .btn-remove:hover { background: #991b1b; }
         </style>
 
         <p class="hint">Every community that's requested or been given access to the shared bot.</p>
@@ -44,6 +46,9 @@
                             <button type="submit" class="btn-secondary">{{ 'Disable' if r.bot_enabled else 'Enable' }}</button>
                         </form>
                         {% endif %}
+                        <form method="POST" action="{{ url_for('owner_remove_server', registry_id=r.id) }}" style="display: inline;" onsubmit="return confirm('Remove the bot from this server? It will need approval again to rejoin.');">
+                            <button type="submit" class="btn-remove">Remove</button>
+                        </form>
                     </td>
                 </tr>
                 {% else %}

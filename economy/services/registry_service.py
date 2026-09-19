@@ -100,5 +100,16 @@ def set_bot_enabled(registry_id: int, enabled: bool):
             session.commit()
 
 
+def remove(registry_id: int) -> GuildRegistry | None:
+    """Remove a server so a future invite must go through approval again."""
+    with SessionLocal() as session:
+        entry = session.get(GuildRegistry, registry_id)
+        if entry is None:
+            return None
+        session.delete(entry)
+        session.commit()
+        return entry
+
+
 def is_super_admin(user_id: str, super_admin_ids: set[str]) -> bool:
     return user_id in super_admin_ids

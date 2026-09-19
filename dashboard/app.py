@@ -895,6 +895,29 @@ def send_discord_dm(user_id: int, content: str) -> bool:
         return False
 
 
+def leave_discord_guild(guild_id: int) -> bool:
+    """Ask Discord to remove this bot from a guild.
+
+    A 404 means the bot is already gone, which is a successful end state for
+    the owner-panel removal flow.
+    """
+    if not DISCORD_TOKEN:
+        return False
+    try:
+        response = requests.delete(
+            f"https://discord.com/api/v10/users/@me/guilds/{guild_id}",
+            headers={"Authorization": f"Bot {DISCORD_TOKEN}"},
+            timeout=10,
+        )
+        if response.status_code not in (204, 404):
+            print(f"⚠️ Failed to leave Discord guild {guild_id}: {response.status_code} {response.text[:300]}")
+            return False
+        return True
+    except Exception as e:
+        print(f"⚠️ Failed to leave Discord guild {guild_id}: {e}")
+        return False
+
+
 def bot_invite_url() -> str | None:
     """Build the owner-facing OAuth2 URL needed to add the bot again.
 
@@ -940,6 +963,24 @@ def owner_toggle_enabled(registry_id):
     if entry:
         reg.set_bot_enabled(registry_id, not entry.bot_enabled)
         flash(f"{'Enabled' if not entry.bot_enabled else 'Disabled'} the bot for {entry.guild_name}.", "success")
+    return redirect(url_for("owner_servers_page"))
+
+
+@app.route("/owner/servers/<int:registry_id>/remove", methods=["POST"])
+@super_admin_required
+def owner_remove_server(registry_id):
+    entries = reg.list_all()
+    entry = next((e for e in entries if e.id == registry_id), None)
+    if entry is None:
+        flash("Server record not found.", "error")
+        return redirect(url_for("owner_servers_page"))
+
+    if not leave_discord_guild(entry.guild_id):
+        flash(f"Could not remove the bot from {entry.guild_name}; the server record was kept.", "error")
+        return redirect(url_for("owner_servers_page"))
+
+    reg.remove(registry_id)
+    flash(f"Removed {entry.guild_name}. The bot must be approved again before it can rejoin.", "success")
     return redirect(url_for("owner_servers_page"))
 
 
