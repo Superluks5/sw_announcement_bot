@@ -23,10 +23,10 @@ Groq's free AI API, formats it using your server template, and posts it.
    - Fill in `DISCORD_TOKEN`, `GROQ_API_KEY`, and `SERVER_NAME`
    - `GUILD_ID` is optional and keeps one legacy/primary server registered;
      additional servers are loaded from the approved-server registry
-    - The dashboard approval link grants Administrator by default. Set
-       `BOT_INVITE_PERMISSIONS` to a different permissions integer if the public
-       bot should use narrower permissions. The link identifies the bot directly
-       from `DISCORD_TOKEN`, so it will not accidentally invite a DEV bot.
+   - The dashboard approval link grants Administrator by default. Set
+     `BOT_INVITE_PERMISSIONS` to a different permissions integer if the public
+     bot should use narrower permissions. The link identifies the bot directly
+     from `DISCORD_TOKEN`, so it will not accidentally invite a DEV bot.
 
 4. **Install and run:**
    ```
@@ -68,3 +68,21 @@ To add a new command:
 
 Some ideas for future commands: `/rules`, `/event` (event announcements),
 `/rank` (assign roles), `/poll`, `/welcome` (custom welcome messages).
+
+## Trust, branding, and privacy
+
+This repository is licensed under `AGPL-3.0-or-later`. The bot commands,
+permission checks, dashboard routes, and approval flow are public so server
+owners can inspect them. The official hosted bot is identified by its Discord
+application, this repository, and its release history.
+
+Forks and self-hosted instances are allowed, but they must use their own
+Discord application and token. Do not copy the official bot name, logo, or
+identity in a way that could make users believe a fork is the official
+instance. See [SECURITY.md](SECURITY.md) for the security model and reporting
+process.
+
+Private deployment material includes `.env`, API keys, OAuth secrets, the
+dashboard secret, production databases, runtime data, logs, and webhooks.
+Those files configure an installation; they do not contain hidden bot
+commands or secret access paths.
