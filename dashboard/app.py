@@ -919,19 +919,36 @@ def leave_discord_guild(guild_id: int) -> bool:
 
 
 def bot_invite_url() -> str | None:
-    """Build the owner-facing OAuth2 URL needed to add the bot again.
+    """Build an invite URL for the bot represented by ``DISCORD_TOKEN``.
 
-    Discord requires a server administrator to authorize a bot invite; the
-    bot token cannot accept an invite on its own.
+    The dashboard OAuth client may be a separate DEV application, so its
+    client ID must not be reused for the bot invite. Discord requires a server
+    administrator to authorize a bot invite; the bot token cannot accept one
+    silently.
     """
-    if not DISCORD_CLIENT_ID:
+    if not DISCORD_TOKEN:
         return None
-    params = urlencode({
-        "client_id": DISCORD_CLIENT_ID,
-        "scope": "bot applications.commands",
-        "permissions": BOT_INVITE_PERMISSIONS,
-    })
-    return f"https://discord.com/oauth2/authorize?{params}"
+    try:
+        response = requests.get(
+            "https://discord.com/api/v10/users/@me",
+            headers={"Authorization": f"Bot {DISCORD_TOKEN}"},
+            timeout=10,
+        )
+        if response.status_code != 200:
+            print(f"⚠️ Failed to identify invite bot: {response.status_code} {response.text[:300]}")
+            return None
+        bot_id = response.json().get("id")
+        if not bot_id:
+            return None
+        params = urlencode({
+            "client_id": bot_id,
+            "scope": "bot applications.commands",
+            "permissions": BOT_INVITE_PERMISSIONS,
+        })
+        return f"https://discord.com/oauth2/authorize?{params}"
+    except Exception as e:
+        print(f"⚠️ Failed to build bot invite URL: {e}")
+        return None
 
 
 @app.route("/owner/servers/<int:registry_id>/decide", methods=["POST"])
