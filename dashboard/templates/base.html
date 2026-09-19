@@ -268,6 +268,9 @@
             <a href="{{ url_for('logs_page') }}" class="nav-item {{ 'active' if active_tab == 'logs' }}" onclick="closeSidebar()"><span class="icon">📜</span> Logs</a>
             <a href="{{ url_for('control_page') }}" class="nav-item {{ 'active' if active_tab == 'control' }}" onclick="closeSidebar()"><span class="icon">🖥️</span> Bot Control</a>
             <a href="{{ url_for('maintenance_page') }}" class="nav-item {{ 'active' if active_tab == 'maintenance' }}" onclick="closeSidebar()"><span class="icon">🔧</span> Maintenance</a>
+            {% if is_super_admin %}
+            <a href="{{ url_for('admin_requests_page') }}" class="nav-item {{ 'active' if active_tab == 'admin_requests' }}" onclick="closeSidebar()"><span class="icon">🛡️</span> Community Requests</a>
+            {% endif %}
         </nav>
 
         <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>

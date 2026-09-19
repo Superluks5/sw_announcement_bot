@@ -25,6 +25,7 @@ from economy.services import permission_service as ps
 from economy.services import balance_service as bs
 from economy.services import games_service as gsvc
 from economy.services import income_service as isvc
+from economy.services import registry_service as reg
 from economy.db import init_db as economy_init_db
 
 economy_init_db()  # safe to call every startup - additive, never drops tables
@@ -43,6 +44,15 @@ DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI", "http://localhost:
 
 ALLOWED_USER_IDS = {
     uid.strip() for uid in os.environ.get("DASHBOARD_ALLOWED_USER_IDS", "").split(",") if uid.strip()
+}
+
+# Can approve/deny community access requests. Defaults to the same set as
+# ALLOWED_USER_IDS if unset, so nothing changes for you today - this is
+# split out as its own concept for when it needs to diverge later (e.g. a
+# moderator who can manage your own dashboard but not approve other
+# communities).
+SUPER_ADMIN_USER_IDS = {
+    uid.strip() for uid in os.environ.get("SUPER_ADMIN_USER_IDS", os.environ.get("DASHBOARD_ALLOWED_USER_IDS", "")).split(",") if uid.strip()
 }
 
 PERMISSIONS_FILE = os.path.join(BASE_DIR, "permissions_config.json")
@@ -184,9 +194,36 @@ def fetch_guild_roles() -> list[dict]:
 
 
 def login_required(view):
+    """Gate for the existing, single-server dashboard - re-checks the
+    allowlist on every request (not just once at login), so it stays exactly
+    as protected as before even though /callback now issues a session to
+    ANY successfully authenticated Discord user (needed for the new
+    request-access flow below)."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        user_id = session.get("user_id")
+        if not user_id or (ALLOWED_USER_IDS and user_id not in ALLOWED_USER_IDS):
+            return redirect(url_for("login"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def any_login_required(view):
+    """Lighter gate - any successfully authenticated Discord user, used only
+    by the request-access flow (not the sensitive dashboard pages)."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not session.get("user_id"):
+            return redirect(url_for("login"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def super_admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        user_id = session.get("user_id")
+        if not user_id or user_id not in SUPER_ADMIN_USER_IDS:
             return redirect(url_for("login"))
         return view(*args, **kwargs)
     return wrapped
@@ -196,13 +233,16 @@ def login_required(view):
 
 @app.context_processor
 def inject_globals():
-    """Makes the live bot status available in the header on every page
-    without needing to pass it from each individual route."""
+    """Makes the live bot status and super-admin flag available on every
+    page without needing to pass them from each individual route."""
     try:
         status = get_service_status("swbot")
     except Exception:
         status = {"active": None}
-    return {"global_bot_status": status}
+    return {
+        "global_bot_status": status,
+        "is_super_admin": session.get("user_id") in SUPER_ADMIN_USER_IDS,
+    }
 
 
 @app.route("/")
@@ -220,7 +260,7 @@ def login():
         "client_id": DISCORD_CLIENT_ID,
         "redirect_uri": DISCORD_REDIRECT_URI,
         "response_type": "code",
-        "scope": "identify",
+        "scope": "identify guilds",
     }
     auth_url = f"https://discord.com/api/oauth2/authorize?{urlencode(params)}"
     return render_template("login.html", auth_url=auth_url)
@@ -258,13 +298,36 @@ def callback():
     user = user_resp.json()
     user_id = user["id"]
 
-    if ALLOWED_USER_IDS and user_id not in ALLOWED_USER_IDS:
-        flash("Your Discord account isn't authorized for this dashboard.", "error")
-        return redirect(url_for("login"))
-
     session["user_id"] = user_id
     session["username"] = user.get("username", "Unknown")
-    return redirect(url_for("dashboard_home"))
+
+    if ALLOWED_USER_IDS and user_id in ALLOWED_USER_IDS:
+        return redirect(url_for("dashboard_home"))
+
+    # Not an existing owner - fetch the servers they administer (owner or
+    # has the Administrator permission) for the request-access picker.
+    ADMINISTRATOR_BIT = 0x8
+    try:
+        guilds_resp = requests.get(
+            "https://discord.com/api/users/@me/guilds",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        guilds = guilds_resp.json() if guilds_resp.status_code == 200 else []
+    except Exception:
+        guilds = []
+
+    admin_guilds = []
+    for g in guilds:
+        try:
+            perms = int(g.get("permissions", 0))
+        except (TypeError, ValueError):
+            perms = 0
+        if g.get("owner") or (perms & ADMINISTRATOR_BIT):
+            admin_guilds.append({"id": g["id"], "name": g["name"]})
+
+    session["administered_guilds"] = admin_guilds
+    return redirect(url_for("request_access_page"))
 
 
 @app.route("/logout")
@@ -749,6 +812,66 @@ def economy_role_income_remove(rule_id):
             db_session.commit()
     flash("Role income rule removed.", "success")
     return redirect(url_for("economy_role_income_page"))
+
+
+# ---------- request access (new communities) ----------
+
+@app.route("/request-access", methods=["GET", "POST"])
+@any_login_required
+def request_access_page():
+    # Existing allowlisted owners don't need this flow
+    if ALLOWED_USER_IDS and session["user_id"] in ALLOWED_USER_IDS:
+        return redirect(url_for("dashboard_home"))
+
+    if request.method == "POST":
+        guild_id = int(request.form["guild_id"])
+        admin_guilds = session.get("administered_guilds", [])
+        match = next((g for g in admin_guilds if g["id"] == str(guild_id)), None)
+        if match is None:
+            flash("That server isn't in your administered-servers list. Log in again if it's missing.", "error")
+            return redirect(url_for("request_access_page"))
+
+        reg.request_access(
+            guild_id=guild_id,
+            guild_name=match["name"],
+            owner_discord_id=int(session["user_id"]),
+            owner_discord_name=session["username"],
+            note=request.form.get("note", "").strip() or None,
+        )
+        flash("Request submitted. You'll be able to check its status here.", "success")
+        return redirect(url_for("request_access_page"))
+
+    admin_guilds = session.get("administered_guilds", [])
+    my_requests = [reg.get_request_for_guild(int(g["id"])) for g in admin_guilds]
+    my_requests = [r for r in my_requests if r is not None]
+
+    return render_template(
+        "request_access.html",
+        username=session.get("username"),
+        admin_guilds=admin_guilds,
+        my_requests=my_requests,
+    )
+
+
+@app.route("/admin/requests")
+@super_admin_required
+def admin_requests_page():
+    return render_template(
+        "admin_requests.html",
+        username=session.get("username"),
+        active_tab="admin_requests",
+        requests_list=reg.list_all(),
+    )
+
+
+@app.route("/admin/requests/<int:registry_id>/decide", methods=["POST"])
+@super_admin_required
+def admin_requests_decide(registry_id):
+    approve = request.form.get("decision") == "approve"
+    entry = reg.decide(registry_id, approve, int(session["user_id"]))
+    if entry:
+        flash(f"{'Approved' if approve else 'Denied'} {entry.guild_name}.", "success")
+    return redirect(url_for("admin_requests_page"))
 
 
 # ---------- server config ----------

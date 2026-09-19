@@ -204,3 +204,26 @@ class RoleIncome(Base):
     amount: Mapped[int] = mapped_column(BigInteger)
     interval_hours: Mapped[int] = mapped_column(Integer, default=12)
     enabled: Mapped[bool] = mapped_column(default=True)
+
+
+class GuildRegistry(Base):
+    """Platform-wide, not economy-specific - lives in the same DB for
+    simplicity (one file, one session pattern, no reason to split it out).
+
+    Tracks which Discord servers are approved to use the shared bot's
+    dashboard, and who owns each one. status: 'pending' | 'approved' | 'denied'.
+    bot_mode: 'shared' (free, runs on the main bot) | 'dedicated' (paid,
+    their own bot token/process - Phase 2, not built yet)."""
+    __tablename__ = "guild_registry"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    guild_name: Mapped[str] = mapped_column(String(200))
+    owner_discord_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    owner_discord_name: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    bot_mode: Mapped[str] = mapped_column(String(20), default="shared")
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    decided_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
