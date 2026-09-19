@@ -1,6 +1,14 @@
 {% extends "owner_base.html" %}
 {% block page_title %}🌐 Servers{% endblock %}
 {% block content %}
+        <style>
+            .status-approved { color: #86efac; }
+            .status-denied { color: #fca5a5; }
+            .status-pending { color: #f2d78a; }
+            .bot-on { color: #86efac; }
+            .bot-off { color: #fca5a5; }
+        </style>
+
         <p class="hint">Every community that's requested or been given access to the shared bot.</p>
 
         <table>
@@ -9,13 +17,15 @@
             </thead>
             <tbody>
                 {% for r in servers %}
+                {% set status_class = 'status-approved' if r.status == 'approved' else 'status-denied' if r.status == 'denied' else 'status-pending' %}
+                {% set bot_class = 'bot-on' if r.bot_enabled else 'bot-off' %}
                 <tr>
                     <td>{{ r.guild_name }}<br><span style="color: var(--text-faint); font-size: 11px;">ID: {{ r.guild_id }}</span>{% if r.note %}<br><span style="color: var(--text-faint); font-size: 11px; font-style: italic;">{{ r.note }}</span>{% endif %}</td>
                     <td>{{ r.owner_discord_name }}</td>
-                    <td style="color: {{ '#86efac' if r.status == 'approved' else ('#fca5a5' if r.status == 'denied' else '#f2d78a') }};">{{ r.status|upper }}</td>
+                    <td class="{{ status_class }}">{{ r.status|upper }}</td>
                     <td>
                         {% if r.status == 'approved' %}
-                        <span style="color: {{ '#86efac' if r.bot_enabled else '#fca5a5' }};">{{ 'ON' if r.bot_enabled else 'OFF' }}</span>
+                        <span class="{{ bot_class }}">{{ 'ON' if r.bot_enabled else 'OFF' }}</span>
                         {% else %}
                         <span style="color: var(--text-faint);">-</span>
                         {% endif %}
