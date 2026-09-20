@@ -56,6 +56,7 @@
 
         {% if admin_guilds %}
         <form method="POST" style="margin-top: 18px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <select name="guild_id" required>
                 {% for g in admin_guilds %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
             </select>

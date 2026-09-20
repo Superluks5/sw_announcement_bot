@@ -21,7 +21,7 @@ class Help(commands.Cog):
         )
         embed.add_field(
             name="Community tools",
-            value="`/announce` · `/broadcast` · `/welcome` · `/partner` · `/team`",
+            value="`/scannounce` · `/broadcast` · `/partner` · `/team`",
             inline=False,
         )
         embed.add_field(
@@ -42,6 +42,16 @@ class Help(commands.Cog):
         if dashboard_url:
             embed.add_field(name="Dashboard", value=f"[Open the server panel]({dashboard_url})", inline=False)
         embed.set_footer(text="Use Discord's slash-command search for detailed command options.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="status", description="Show the bot's connection status")
+    async def status(self, interaction: discord.Interaction):
+        latency_ms = round(self.bot.latency * 1000) if self.bot.latency >= 0 else None
+        embed = discord.Embed(title="📡 Bot Status", color=discord.Color.green())
+        embed.add_field(name="Connection", value="Online", inline=True)
+        embed.add_field(name="Latency", value=f"{latency_ms} ms" if latency_ms is not None else "Unknown", inline=True)
+        embed.add_field(name="Servers", value=str(len(self.bot.guilds)), inline=True)
+        embed.set_footer(text="Status is measured from the Discord gateway.")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 

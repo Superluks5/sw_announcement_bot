@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="owner-csrf-token" content="{{ owner_csrf_token }}">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Owner Panel{% block title %}{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -87,6 +87,13 @@
             <div class="hud-bar">
                 <h1 class="hud-title">{% block page_title %}{% endblock %}</h1>
                 <div class="hud-right">
+                    {% if available_dashboard_guilds|length > 1 %}
+                    <select onchange="window.location.href='/select-server/' + this.value" aria-label="Select server">
+                        {% for guild in available_dashboard_guilds %}
+                        <option value="{{ guild.id }}" {{ 'selected' if guild.id|string == selected_guild_id }}>{{ guild.name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% endif %}
                     <button class="menu-btn" onclick="toggleOwnerMenu(event)" aria-label="Menu">⋮</button>
                     <div class="dropdown" id="ownerHeaderDropdown">
                         <div class="dropdown-row">
@@ -104,7 +111,7 @@
             </div>
             <script>
             document.addEventListener('DOMContentLoaded', () => {
-                const token = document.querySelector('meta[name="owner-csrf-token"]').content;
+                const token = document.querySelector('meta[name="csrf-token"]').content;
                 document.querySelectorAll('form[method="POST"], form[method="post"]').forEach((form) => {
                     const input = document.createElement('input');
                     input.type = 'hidden';

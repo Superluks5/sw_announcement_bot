@@ -29,12 +29,18 @@ from economy.services import games_service as gsvc
 from economy.services import income_service as isvc
 from economy.services import registry_service as reg
 from economy.db import init_db as economy_init_db, DB_PATH
+from guild_paths import guild_file
 
 economy_init_db()  # safe to call every startup - additive, never drops tables
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("DASHBOARD_SECRET_KEY", "change-me-in-env")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("DASHBOARD_COOKIE_SECURE", "0") == "1",
+)
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 GUILD_ID = os.environ.get("GUILD_ID", "1535372103593894028")
@@ -119,7 +125,7 @@ def fetch_guild_channels() -> list[dict]:
         return []
     try:
         resp = requests.get(
-            f"https://discord.com/api/v10/guilds/{GUILD_ID}/channels",
+            f"https://discord.com/api/v10/guilds/{current_guild_id()}/channels",
             headers={"Authorization": f"Bot {DISCORD_TOKEN}"},
             timeout=10,
         )
@@ -142,7 +148,7 @@ def fetch_guild_members() -> list[dict]:
         return []
     try:
         resp = requests.get(
-            f"https://discord.com/api/v10/guilds/{GUILD_ID}/members?limit=1000",
+            f"https://discord.com/api/v10/guilds/{current_guild_id()}/members?limit=1000",
             headers={"Authorization": f"Bot {DISCORD_TOKEN}"},
             timeout=10,
         )
@@ -184,7 +190,7 @@ def fetch_guild_roles() -> list[dict]:
         return []
     try:
         resp = requests.get(
-            f"https://discord.com/api/v10/guilds/{GUILD_ID}/roles",
+            f"https://discord.com/api/v10/guilds/{current_guild_id()}/roles",
             headers={"Authorization": f"Bot {DISCORD_TOKEN}"},
             timeout=10,
         )
@@ -210,6 +216,8 @@ def login_required(view):
         user_id = session.get("user_id")
         if not user_id or (ALLOWED_USER_IDS and user_id not in ALLOWED_USER_IDS):
             return redirect(url_for("login"))
+        if "guild_id" not in session:
+            session["guild_id"] = int(GUILD_ID)
         return view(*args, **kwargs)
     return wrapped
 
@@ -225,6 +233,23 @@ def any_login_required(view):
     return wrapped
 
 
+def current_guild_id() -> int:
+    return int(session.get("guild_id", GUILD_ID))
+
+
+def available_dashboard_guilds() -> list[dict]:
+    guilds = session.get("administered_guilds", [])
+    if guilds:
+        return guilds
+    if session.get("user_id") in ALLOWED_USER_IDS:
+        return [{"id": str(GUILD_ID), "name": "Primary server"}]
+    return []
+
+
+def selected_guild_file(filename: str) -> str:
+    return guild_file(current_guild_id(), filename)
+
+
 def super_admin_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -236,24 +261,24 @@ def super_admin_required(view):
 
 
 def owner_csrf_token() -> str:
-    token = session.get("owner_csrf_token")
+    token = session.get("csrf_token")
     if not token:
         token = secrets.token_urlsafe(32)
-        session["owner_csrf_token"] = token
+        session["csrf_token"] = token
     return token
 
 
 @app.before_request
 def protect_owner_posts():
-    if request.method == "POST" and request.path.startswith("/owner/"):
-        expected = session.get("owner_csrf_token")
+    if request.method == "POST" and request.path not in {"/callback"}:
+        expected = session.get("csrf_token")
         if not expected or not secrets.compare_digest(request.form.get("csrf_token", ""), expected):
             return "Invalid or missing security token.", 400
 
 
 @app.context_processor
 def inject_owner_security():
-    return {"owner_csrf_token": owner_csrf_token()}
+    return {"owner_csrf_token": owner_csrf_token(), "csrf_token": owner_csrf_token()}
 
 
 # ---------- public landing ----------
@@ -269,6 +294,8 @@ def inject_globals():
     return {
         "global_bot_status": status,
         "is_super_admin": session.get("user_id") in SUPER_ADMIN_USER_IDS,
+        "available_dashboard_guilds": available_dashboard_guilds(),
+        "selected_guild_id": str(session.get("guild_id", GUILD_ID)),
     }
 
 
@@ -306,6 +333,8 @@ def login():
         "response_type": "code",
         "scope": "identify guilds",
     }
+    session["oauth_state"] = secrets.token_urlsafe(32)
+    params["state"] = session["oauth_state"]
     auth_url = f"https://discord.com/api/oauth2/authorize?{urlencode(params)}"
     return render_template("login.html", auth_url=auth_url)
 
@@ -313,7 +342,8 @@ def login():
 @app.route("/callback")
 def callback():
     code = request.args.get("code")
-    if not code:
+    state = request.args.get("state")
+    if not code or not state or not secrets.compare_digest(state, session.pop("oauth_state", "")):
         flash("Login was cancelled or failed.", "error")
         return redirect(url_for("login"))
 
@@ -380,12 +410,23 @@ def logout():
     return redirect(url_for("landing"))
 
 
+@app.route("/select-server/<int:guild_id>")
+@login_required
+def select_server(guild_id):
+    allowed_ids = {int(guild["id"]) for guild in available_dashboard_guilds()}
+    if guild_id not in allowed_ids:
+        flash("You do not administer that server.", "error")
+        return redirect(url_for("dashboard_home"))
+    session["guild_id"] = guild_id
+    return redirect(request.referrer or url_for("dashboard_home"))
+
+
 # ---------- dashboard home ----------
 
 @app.route("/dashboard")
 @login_required
 def dashboard_home():
-    usage = load_json(USAGE_FILE, {})
+    usage = load_json(selected_guild_file("usage_data.json"), {})
     sorted_usage = sorted(usage.items(), key=lambda kv: kv[1]["count"], reverse=True)[:10]
 
     top_commands = []
@@ -420,8 +461,8 @@ def dashboard_home():
 @app.route("/permissions", methods=["GET", "POST"])
 @login_required
 def permissions_page():
-    data = load_json(PERMISSIONS_FILE, {})
-    toggles = load_json(TOGGLES_FILE, {})
+    data = load_json(selected_guild_file("permissions_config.json"), {})
+    toggles = load_json(selected_guild_file("command_toggles.json"), {})
     roles = fetch_guild_roles()
 
     if request.method == "POST":
@@ -437,8 +478,8 @@ def permissions_page():
 
             new_toggles[command] = enabled_field in request.form
 
-        save_json(PERMISSIONS_FILE, new_data)
-        save_json(TOGGLES_FILE, new_toggles)
+        save_json(selected_guild_file("permissions_config.json"), new_data)
+        save_json(selected_guild_file("command_toggles.json"), new_toggles)
         flash("Saved - takes effect immediately, no restart needed.", "success")
         return redirect(url_for("permissions_page"))
 
@@ -470,11 +511,11 @@ def permissions_page():
 # ---------- roadmap ----------
 
 def load_roadmap() -> dict:
-    return load_json(ROADMAP_FILE, {"items": [], "channel_id": None, "message_id": None})
+    return load_json(selected_guild_file("roadmap_data.json"), {"items": [], "channel_id": None, "message_id": None})
 
 
 def save_roadmap(data: dict):
-    save_json(ROADMAP_FILE, data)
+    save_json(selected_guild_file("roadmap_data.json"), data)
 
 
 @app.route("/roadmap")
@@ -538,11 +579,11 @@ TASKBOARD_STATUS_ORDER = {"in_progress": 0, "todo": 1, "done": 2}
 
 
 def load_taskboard() -> dict:
-    return load_json(TASKBOARD_FILE, {"tasks": [], "channel_id": None, "message_id": None})
+    return load_json(selected_guild_file("taskboard_data.json"), {"tasks": [], "channel_id": None, "message_id": None})
 
 
 def save_taskboard(data: dict):
-    save_json(TASKBOARD_FILE, data)
+    save_json(selected_guild_file("taskboard_data.json"), data)
 
 
 @app.route("/taskboard")
@@ -628,7 +669,7 @@ def fetch_member_role_ids(user_id: str) -> list[int]:
 @app.route("/economy/permissions", methods=["GET"])
 @login_required
 def economy_permissions_page():
-    rules = ps.list_rules(int(GUILD_ID))
+    rules = ps.list_rules(current_guild_id())
     roles = fetch_guild_roles()
     members = fetch_guild_members()
     channels = fetch_guild_channels()
@@ -641,7 +682,7 @@ def economy_permissions_page():
         return names.get(str(rule.target_id), f"ID {rule.target_id}")
 
     rule_rows = [{"rule": r, "target_label": label_for(r)} for r in rules]
-    role_presets = ps.get_role_presets(int(GUILD_ID))
+    role_presets = ps.get_role_presets(current_guild_id())
 
     return render_template(
         "economy_permissions.html",
@@ -667,7 +708,7 @@ def economy_add_rule():
     command_or_category = request.form["command_or_category"]
     effect = request.form["effect"]
 
-    ps.add_rule(int(GUILD_ID), rule_type, target_type, target_id, command_or_category, effect, int(session["user_id"]))
+    ps.add_rule(current_guild_id(), rule_type, target_type, target_id, command_or_category, effect, int(session["user_id"]))
     flash("Rule added.", "success")
     return redirect(url_for("economy_permissions_page"))
 
@@ -675,7 +716,7 @@ def economy_add_rule():
 @app.route("/economy/permissions/remove-rule/<int:rule_id>", methods=["POST"])
 @login_required
 def economy_remove_rule(rule_id):
-    ps.remove_rule(int(GUILD_ID), rule_id, int(session["user_id"]))
+    ps.remove_rule(current_guild_id(), rule_id, int(session["user_id"]))
     flash("Rule removed.", "success")
     return redirect(url_for("economy_permissions_page"))
 
@@ -685,7 +726,7 @@ def economy_remove_rule(rule_id):
 def economy_apply_preset():
     role_id = int(request.form["role_id"])
     preset_name = request.form["preset_name"]
-    ps.apply_preset(int(GUILD_ID), role_id, preset_name, int(session["user_id"]))
+    ps.apply_preset(current_guild_id(), role_id, preset_name, int(session["user_id"]))
     flash(f"Applied '{preset_name}' to the role.", "success")
     return redirect(url_for("economy_permissions_page"))
 
@@ -700,7 +741,7 @@ def economy_permission_test_page():
         channel_id = request.form.get("channel_id")
         role_ids = fetch_member_role_ids(str(member_id))
         result = ps.check_permission(
-            int(GUILD_ID), member_id, role_ids, command,
+            current_guild_id(), member_id, role_ids, command,
             channel_id=int(channel_id) if channel_id else None,
         )
 
@@ -718,7 +759,7 @@ def economy_permission_test_page():
 @app.route("/economy/audit-log")
 @login_required
 def economy_audit_log_page():
-    logs = ps.get_audit_log(int(GUILD_ID))
+    logs = ps.get_audit_log(current_guild_id())
     return render_template(
         "economy_audit_log.html",
         username=session.get("username"),
@@ -735,7 +776,7 @@ def economy_games_page():
     if request.method == "POST":
         for game in gsvc.DEFAULT_CONFIGS:
             gsvc.set_game_config(
-                int(GUILD_ID), game,
+                current_guild_id(), game,
                 min_bet=int(request.form.get(f"min_bet_{game}", 10)),
                 max_bet=int(request.form.get(f"max_bet_{game}", 10000)),
                 cooldown_seconds=int(request.form.get(f"cooldown_{game}", 3)),
@@ -744,7 +785,7 @@ def economy_games_page():
         flash("Game settings saved - takes effect immediately.", "success")
         return redirect(url_for("economy_games_page"))
 
-    configs = gsvc.list_game_configs(int(GUILD_ID))
+    configs = gsvc.list_game_configs(current_guild_id())
     return render_template(
         "economy_games.html",
         username=session.get("username"),
@@ -761,7 +802,7 @@ def economy_income_page():
     if request.method == "POST":
         for cmd in isvc.DEFAULT_INCOME_CONFIGS:
             isvc.set_income_config(
-                int(GUILD_ID), cmd,
+                current_guild_id(), cmd,
                 min_payout=int(request.form.get(f"min_{cmd}", 0)),
                 max_payout=int(request.form.get(f"max_{cmd}", 0)),
                 cooldown_seconds=int(request.form.get(f"cooldown_{cmd}", 3600)),
@@ -772,7 +813,7 @@ def economy_income_page():
         flash("Income settings saved - takes effect immediately.", "success")
         return redirect(url_for("economy_income_page"))
 
-    configs = isvc.list_income_configs(int(GUILD_ID))
+    configs = isvc.list_income_configs(current_guild_id())
     return render_template(
         "economy_income.html",
         username=session.get("username"),
@@ -786,7 +827,7 @@ def economy_income_page():
 def economy_chat_money_page():
     if request.method == "POST":
         isvc.set_chat_money_config(
-            int(GUILD_ID),
+            current_guild_id(),
             enabled="enabled" in request.form,
             min_amount=int(request.form.get("min_amount", 1)),
             max_amount=int(request.form.get("max_amount", 5)),
@@ -797,7 +838,7 @@ def economy_chat_money_page():
         flash("Chat money settings saved.", "success")
         return redirect(url_for("economy_chat_money_page"))
 
-    config = isvc.get_chat_money_config(int(GUILD_ID))
+    config = isvc.get_chat_money_config(current_guild_id())
     return render_template(
         "economy_chat_money.html",
         username=session.get("username"),
@@ -816,7 +857,7 @@ def economy_role_income_page():
     from economy.db import SessionLocal
     from economy.models import RoleIncome
     with SessionLocal() as db_session:
-        rules = db_session.query(RoleIncome).filter_by(guild_id=int(GUILD_ID)).all()
+        rules = db_session.query(RoleIncome).filter_by(guild_id=current_guild_id()).all()
     return render_template(
         "economy_role_income.html",
         username=session.get("username"),
@@ -833,7 +874,7 @@ def economy_role_income_add():
     from economy.models import RoleIncome
     with SessionLocal() as db_session:
         db_session.add(RoleIncome(
-            guild_id=int(GUILD_ID),
+            guild_id=current_guild_id(),
             role_id=int(request.form["role_id"]),
             amount=int(request.form["amount"]),
             interval_hours=int(request.form["interval_hours"]),
@@ -850,7 +891,7 @@ def economy_role_income_remove(rule_id):
     from economy.db import SessionLocal
     from economy.models import RoleIncome
     with SessionLocal() as db_session:
-        rule = db_session.query(RoleIncome).filter_by(id=rule_id, guild_id=int(GUILD_ID)).one_or_none()
+        rule = db_session.query(RoleIncome).filter_by(id=rule_id, guild_id=current_guild_id()).one_or_none()
         if rule:
             db_session.delete(rule)
             db_session.commit()
@@ -1384,7 +1425,7 @@ SERVER_CONFIG_DEFAULTS = {
 @app.route("/server-config", methods=["GET", "POST"])
 @login_required
 def server_config_page():
-    config = load_json(SERVER_CONFIG_FILE, dict(SERVER_CONFIG_DEFAULTS))
+    config = load_json(selected_guild_file("server_config.json"), dict(SERVER_CONFIG_DEFAULTS))
     for key, default in SERVER_CONFIG_DEFAULTS.items():
         config.setdefault(key, default)
 
@@ -1397,7 +1438,7 @@ def server_config_page():
             "auto_role_id": request.form.get("auto_role_id") or None,
             "log_channel_id": request.form.get("log_channel_id") or None,
         }
-        save_json(SERVER_CONFIG_FILE, new_config)
+        save_json(selected_guild_file("server_config.json"), new_config)
         flash("Saved - takes effect immediately, no restart needed.", "success")
         return redirect(url_for("server_config_page"))
 
@@ -1499,11 +1540,11 @@ def embed_builder_send():
 # ---------- partners ----------
 
 def load_partners() -> dict:
-    return load_json(PARTNER_FILE, {"partners": [], "channel_id": None, "message_id": None})
+    return load_json(selected_guild_file("partner_data.json"), {"partners": [], "channel_id": None, "message_id": None})
 
 
 def save_partners(data: dict):
-    save_json(PARTNER_FILE, data)
+    save_json(selected_guild_file("partner_data.json"), data)
 
 
 @app.route("/partners")
@@ -1549,12 +1590,12 @@ def partners_remove(partner_id):
 @app.route("/maintenance", methods=["GET", "POST"])
 @login_required
 def maintenance_page():
-    config = load_json(MAINTENANCE_FILE, {"enabled": False, "allowed_user_id": None})
+    config = load_json(selected_guild_file("maintenance.json"), {"enabled": False, "allowed_user_id": None})
 
     if request.method == "POST":
         enabled = "enabled" in request.form
         allowed_user_id = request.form.get("allowed_user_id", "").strip() or session.get("user_id")
-        save_json(MAINTENANCE_FILE, {"enabled": enabled, "allowed_user_id": allowed_user_id})
+        save_json(selected_guild_file("maintenance.json"), {"enabled": enabled, "allowed_user_id": allowed_user_id})
         flash(
             "Maintenance mode ON - every command is now blocked for everyone except the exempt user." if enabled
             else "Maintenance mode OFF - normal permissions restored.",

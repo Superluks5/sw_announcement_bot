@@ -9,6 +9,7 @@ class OwnerPanelTests(unittest.TestCase):
     def setUpClass(cls):
         dashboard_app.app.config["TESTING"] = True
         dashboard_app.SUPER_ADMIN_USER_IDS.add("123")
+        dashboard_app.ALLOWED_USER_IDS.add("123")
 
     def setUp(self):
         self.client = dashboard_app.app.test_client()
@@ -29,7 +30,7 @@ class OwnerPanelTests(unittest.TestCase):
         with self.client.get("/owner"):
             pass
         with self.client.session_transaction() as session:
-            csrf_token = session["owner_csrf_token"]
+            csrf_token = session["csrf_token"]
         with patch.object(dashboard_app, "refresh_discovered_servers", return_value=(2, 1)):
             response = self.client.post(
                 "/owner/servers/refresh",
@@ -45,6 +46,20 @@ class OwnerPanelTests(unittest.TestCase):
         response = self.client.get("/health")
         self.assertIn(response.status_code, (200, 503))
         self.assertIn("status", response.get_json())
+
+    def test_server_selection_rejects_unadministered_server(self):
+        with self.client.session_transaction() as session:
+            session["administered_guilds"] = [{"id": "456", "name": "Allowed"}]
+        response = self.client.get("/select-server/999")
+        self.assertEqual(response.status_code, 302)
+
+    def test_server_selection_accepts_administered_server(self):
+        with self.client.session_transaction() as session:
+            session["administered_guilds"] = [{"id": "456", "name": "Allowed"}]
+        response = self.client.get("/select-server/456")
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as session:
+            self.assertEqual(session["guild_id"], 456)
 
 
 if __name__ == "__main__":
