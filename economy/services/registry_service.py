@@ -7,7 +7,7 @@ servers for command registration.
 """
 
 from economy.db import SessionLocal
-from economy.models import GuildRegistry
+from economy.models import GuildRegistry, OwnerAuditLog
 
 
 def request_access(guild_id: int, guild_name: str, owner_discord_id: int, owner_discord_name: str, note: str = None) -> GuildRegistry:
@@ -54,6 +54,29 @@ def list_pending() -> list[GuildRegistry]:
 def list_all() -> list[GuildRegistry]:
     with SessionLocal() as session:
         return session.query(GuildRegistry).order_by(GuildRegistry.requested_at.desc()).all()
+
+
+def list_owner_audit(limit: int = 100) -> list[OwnerAuditLog]:
+    with SessionLocal() as session:
+        return session.query(OwnerAuditLog).order_by(OwnerAuditLog.timestamp.desc()).limit(limit).all()
+
+
+def record_owner_action(
+    actor_id: int,
+    action: str,
+    entry: GuildRegistry | None = None,
+    details: str | None = None,
+):
+    with SessionLocal() as session:
+        audit_entry = OwnerAuditLog(
+            registry_id=entry.id if entry else None,
+            guild_id=entry.guild_id if entry else None,
+            actor_id=actor_id,
+            action=action,
+            details=details,
+        )
+        session.add(audit_entry)
+        session.commit()
 
 
 def decide(registry_id: int, approve: bool, decided_by: int) -> GuildRegistry | None:

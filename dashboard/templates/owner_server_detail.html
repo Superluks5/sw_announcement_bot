@@ -1,0 +1,38 @@
+{% extends "owner_base.html" %}
+{% block page_title %}🌐 {{ server.guild_name }}{% endblock %}
+{% block content %}
+<style>
+    .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .detail { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+    .detail label { display: block; color: var(--text-faint); font-size: 10px; text-transform: uppercase; letter-spacing: .7px; margin-bottom: 5px; }
+    .detail strong { font-size: 14px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 24px; }
+    .audit-row { border-bottom: 1px solid var(--border); padding: 10px 0; font-size: 12.5px; }
+    .audit-row:last-child { border-bottom: 0; }
+</style>
+<p class="hint">Server ID: {{ server.guild_id }} · Registry record {{ server.id }}</p>
+<div class="detail-grid">
+    <div class="detail"><label>Status</label><strong>{{ server.status|upper }}</strong></div>
+    <div class="detail"><label>Bot access</label><strong>{{ 'ENABLED' if server.bot_enabled else 'DISABLED' }}</strong></div>
+    <div class="detail"><label>Owner</label><strong>{{ server.owner_discord_name }}</strong><br><span class="hint">{{ server.owner_discord_id }}</span></div>
+    <div class="detail"><label>Requested</label><strong>{{ server.requested_at.strftime('%b %d, %Y %H:%M') }}</strong></div>
+    <div class="detail"><label>Decision</label><strong>{{ server.decided_at.strftime('%b %d, %Y %H:%M') if server.decided_at else 'Not decided' }}</strong></div>
+    <div class="detail"><label>Note</label><strong>{{ server.note or 'No note' }}</strong></div>
+</div>
+<div class="actions">
+    {% if server.status == 'pending' %}
+    <form method="POST" action="{{ url_for('owner_decide', registry_id=server.id) }}"><button name="decision" value="approve">Approve</button></form>
+    <form method="POST" action="{{ url_for('owner_decide', registry_id=server.id) }}"><button name="decision" value="deny" class="btn-danger">Deny</button></form>
+    {% elif server.status == 'approved' %}
+    <form method="POST" action="{{ url_for('owner_toggle_enabled', registry_id=server.id) }}"><button class="btn-secondary">{{ 'Disable bot' if server.bot_enabled else 'Enable bot' }}</button></form>
+    <form method="POST" action="{{ url_for('owner_resend_invite', registry_id=server.id) }}"><button class="btn-secondary">Resend invite</button></form>
+    {% endif %}
+    <form method="POST" action="{{ url_for('owner_remove_server', registry_id=server.id) }}" onsubmit="return confirm('Remove the bot from this server?');"><button class="btn-danger">Remove server</button></form>
+</div>
+<h2>Audit history</h2>
+<div class="detail">
+    {% for entry in audit_entries %}
+    <div class="audit-row"><strong>{{ entry.action|upper }}</strong> · {{ entry.details or 'No details' }}<br><span class="hint">{{ entry.timestamp.strftime('%b %d, %Y %H:%M') }} · actor {{ entry.actor_id }}</span></div>
+    {% else %}<p class="hint">No audit actions for this server yet.</p>{% endfor %}
+</div>
+{% endblock %}

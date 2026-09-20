@@ -856,14 +856,109 @@ def request_access_page():
     )
 
 
+@app.route("/owner")
+@super_admin_required
+def owner_dashboard_page():
+    servers = reg.list_all()
+    logs = load_json(BOT_LOGS_FILE, [])
+    recent_logs = []
+    for entry in reversed(logs[-8:]):
+        recent_logs.append({
+            **entry,
+            "time_display": datetime.fromtimestamp(entry.get("time", 0)).strftime("%b %d, %H:%M:%S"),
+        })
+
+    return render_template(
+        "owner_dashboard.html",
+        username=session.get("username"),
+        active_tab="owner_dashboard",
+        stats={
+            "total": len(servers),
+            "pending": sum(server.status == "pending" for server in servers),
+            "approved": sum(server.status == "approved" for server in servers),
+            "disabled": sum(server.status == "approved" and not server.bot_enabled for server in servers),
+        },
+        service_status=get_service_status("swbot"),
+        recent_logs=recent_logs,
+        recent_audit=reg.list_owner_audit(8),
+    )
+
+
 @app.route("/owner/servers")
 @super_admin_required
 def owner_servers_page():
+    query = request.args.get("q", "").strip().lower()
+    status = request.args.get("status", "all")
+    servers = reg.list_all()
+    if query:
+        servers = [
+            server for server in servers
+            if query in server.guild_name.lower()
+            or query in str(server.guild_id)
+            or query in server.owner_discord_name.lower()
+        ]
+    if status != "all":
+        servers = [server for server in servers if server.status == status]
+
     return render_template(
         "owner_servers.html",
         username=session.get("username"),
         active_tab="owner_servers",
-        servers=reg.list_all(),
+        servers=servers,
+        query=request.args.get("q", ""),
+        status=status,
+    )
+
+
+@app.route("/owner/servers/<int:registry_id>")
+@super_admin_required
+def owner_server_detail(registry_id):
+    entry = next((server for server in reg.list_all() if server.id == registry_id), None)
+    if entry is None:
+        flash("Server record not found.", "error")
+        return redirect(url_for("owner_servers_page"))
+    return render_template(
+        "owner_server_detail.html",
+        username=session.get("username"),
+        active_tab="owner_servers",
+        server=entry,
+        audit_entries=[audit for audit in reg.list_owner_audit(100) if audit.registry_id == registry_id][:20],
+    )
+
+
+@app.route("/owner/logs")
+@super_admin_required
+def owner_logs_page():
+    query = request.args.get("q", "").strip().lower()
+    level = request.args.get("level", "all")
+    entries = []
+    for entry in reversed(load_json(BOT_LOGS_FILE, [])):
+        if level != "all" and entry.get("level") != level:
+            continue
+        if query and query not in entry.get("message", "").lower():
+            continue
+        entries.append({
+            **entry,
+            "time_display": datetime.fromtimestamp(entry.get("time", 0)).strftime("%b %d, %H:%M:%S"),
+        })
+    return render_template(
+        "owner_logs.html",
+        username=session.get("username"),
+        active_tab="owner_logs",
+        logs=entries[:200],
+        query=request.args.get("q", ""),
+        level=level,
+    )
+
+
+@app.route("/owner/audit")
+@super_admin_required
+def owner_audit_page():
+    return render_template(
+        "owner_audit.html",
+        username=session.get("username"),
+        active_tab="owner_audit",
+        entries=reg.list_owner_audit(200),
     )
 
 
@@ -959,6 +1054,12 @@ def owner_decide(registry_id):
     approve = request.form.get("decision") == "approve"
     entry = reg.decide(registry_id, approve, int(session["user_id"]))
     if entry:
+        reg.record_owner_action(
+            int(session["user_id"]),
+            "approved" if approve else "denied",
+            entry,
+            entry.note or "No review note",
+        )
         flash(f"{'Approved' if approve else 'Denied'} {entry.guild_name}.", "success")
         if approve:
             invite_url = bot_invite_url()
@@ -980,7 +1081,14 @@ def owner_toggle_enabled(registry_id):
     entries = reg.list_all()
     entry = next((e for e in entries if e.id == registry_id), None)
     if entry:
-        reg.set_bot_enabled(registry_id, not entry.bot_enabled)
+        enabled = not entry.bot_enabled
+        reg.set_bot_enabled(registry_id, enabled)
+        reg.record_owner_action(
+            int(session["user_id"]),
+            "enabled" if enabled else "disabled",
+            entry,
+            "Owner Panel toggle",
+        )
         flash(f"{'Enabled' if not entry.bot_enabled else 'Disabled'} the bot for {entry.guild_name}.", "success")
     return redirect(url_for("owner_servers_page"))
 
@@ -998,9 +1106,30 @@ def owner_remove_server(registry_id):
         flash(f"Could not remove the bot from {entry.guild_name}; the server record was kept.", "error")
         return redirect(url_for("owner_servers_page"))
 
+    reg.record_owner_action(int(session["user_id"]), "removed", entry, "Bot removed from Discord server")
     reg.remove(registry_id)
     flash(f"Removed {entry.guild_name}. The bot must be approved again before it can rejoin.", "success")
     return redirect(url_for("owner_servers_page"))
+
+
+@app.route("/owner/servers/<int:registry_id>/resend-invite", methods=["POST"])
+@super_admin_required
+def owner_resend_invite(registry_id):
+    entry = next((server for server in reg.list_all() if server.id == registry_id), None)
+    if entry is None:
+        flash("Server record not found.", "error")
+        return redirect(url_for("owner_servers_page"))
+    invite_url = bot_invite_url()
+    dm_text = (
+        f"✅ Access for **{entry.guild_name}** is approved. Add the bot again with this link:\n"
+        f"{invite_url or 'The bot invite link is not configured; please contact an administrator.'}"
+    )
+    if not send_discord_dm(entry.owner_discord_id, dm_text):
+        flash("The invite could not be sent. Check the bot token and the owner's DM settings.", "error")
+        return redirect(url_for("owner_server_detail", registry_id=registry_id))
+    reg.record_owner_action(int(session["user_id"]), "invite_resent", entry, "Approval invite sent")
+    flash(f"Invite sent to {entry.owner_discord_name}.", "success")
+    return redirect(url_for("owner_server_detail", registry_id=registry_id))
 
 
 # ---------- server config ----------

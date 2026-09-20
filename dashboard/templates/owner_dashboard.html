@@ -1,0 +1,47 @@
+{% extends "owner_base.html" %}
+{% block page_title %}📡 Overview{% endblock %}
+{% block content %}
+<style>
+    .owner-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
+    .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .stat strong { display: block; font: 700 28px 'Rajdhani', sans-serif; color: var(--gold); }
+    .stat span { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+    .owner-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .owner-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .owner-panel h2 { margin: 0 0 12px; font-size: 16px; color: var(--gold); }
+    .log-line { border-top: 1px solid var(--border); padding: 9px 0; font-size: 12px; }
+    .log-line:first-child { border-top: 0; }
+    .log-meta { color: var(--text-faint); font-size: 11px; margin-bottom: 3px; }
+    .error { color: #fca5a5; }
+    .ok { color: #86efac; }
+    @media (max-width: 760px) { .owner-stats, .owner-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+<div class="owner-stats">
+    <div class="stat"><strong>{{ stats.total }}</strong><span>Known servers</span></div>
+    <div class="stat"><strong>{{ stats.pending }}</strong><span>Pending review</span></div>
+    <div class="stat"><strong>{{ stats.approved }}</strong><span>Approved</span></div>
+    <div class="stat"><strong>{{ stats.disabled }}</strong><span>Disabled</span></div>
+</div>
+<div class="owner-grid">
+    <section class="owner-panel">
+        <h2>Service health</h2>
+        <p><strong class="{{ 'ok' if service_status.active else 'error' }}">{{ 'ONLINE' if service_status.active else 'OFFLINE' }}</strong></p>
+        <p class="hint">Service: swbot{% if service_status.active is not none %} · State checked now{% endif %}</p>
+        <a class="btn" href="{{ url_for('owner_servers_page') }}">Manage servers</a>
+    </section>
+    <section class="owner-panel">
+        <h2>Recent audit actions</h2>
+        {% for entry in recent_audit %}
+        <div class="log-line"><strong>{{ entry.action|upper }}</strong> · guild {{ entry.guild_id or '-' }}<br><span class="log-meta">{{ entry.timestamp.strftime('%b %d, %H:%M') }} · actor {{ entry.actor_id }}</span></div>
+        {% else %}<p class="hint">No Owner Panel actions recorded yet.</p>{% endfor %}
+        <a class="btn btn-secondary" href="{{ url_for('owner_audit_page') }}">View audit history</a>
+    </section>
+    <section class="owner-panel" style="grid-column: 1 / -1;">
+        <h2>Recent bot logs</h2>
+        {% for entry in recent_logs %}
+        <div class="log-line {{ 'error' if entry.level == 'error' else '' }}"><strong>{{ entry.level|upper }}</strong> · {{ entry.message }}<br><span class="log-meta">{{ entry.time_display }}</span></div>
+        {% else %}<p class="hint">No bot logs recorded yet.</p>{% endfor %}
+        <a class="btn btn-secondary" href="{{ url_for('owner_logs_page') }}">Search logs</a>
+    </section>
+</div>
+{% endblock %}

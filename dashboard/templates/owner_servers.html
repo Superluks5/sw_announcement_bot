@@ -13,6 +13,17 @@
 
         <p class="hint">Every community that's requested or been given access to the shared bot.</p>
 
+        <form method="GET" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+            <input type="text" name="q" value="{{ query }}" placeholder="Search server, owner, or ID" style="min-width:240px; flex:1;">
+            <select name="status">
+                <option value="all" {{ 'selected' if status == 'all' }}>All statuses</option>
+                <option value="pending" {{ 'selected' if status == 'pending' }}>Pending</option>
+                <option value="approved" {{ 'selected' if status == 'approved' }}>Approved</option>
+                <option value="denied" {{ 'selected' if status == 'denied' }}>Denied</option>
+            </select>
+            <button type="submit">Filter</button>
+        </form>
+
         <table>
             <thead>
                 <tr><th>Server</th><th>Owner</th><th>Status</th><th>Bot</th><th>Requested</th><th></th></tr>
@@ -22,7 +33,7 @@
                 {% set status_class = 'status-approved' if r.status == 'approved' else 'status-denied' if r.status == 'denied' else 'status-pending' %}
                 {% set bot_class = 'bot-on' if r.bot_enabled else 'bot-off' %}
                 <tr>
-                    <td>{{ r.guild_name }}<br><span style="color: var(--text-faint); font-size: 11px;">ID: {{ r.guild_id }}</span>{% if r.note %}<br><span style="color: var(--text-faint); font-size: 11px; font-style: italic;">{{ r.note }}</span>{% endif %}</td>
+                    <td><a href="{{ url_for('owner_server_detail', registry_id=r.id) }}">{{ r.guild_name }}</a><br><span style="color: var(--text-faint); font-size: 11px;">ID: {{ r.guild_id }}</span>{% if r.note %}<br><span style="color: var(--text-faint); font-size: 11px; font-style: italic;">{{ r.note }}</span>{% endif %}</td>
                     <td>{{ r.owner_discord_name }}</td>
                     <td class="{{ status_class }}">{{ r.status|upper }}</td>
                     <td>

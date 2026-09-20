@@ -228,3 +228,16 @@ class GuildRegistry(Base):
     requested_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+
+class OwnerAuditLog(Base):
+    """Platform-wide record of actions taken in the Owner Panel."""
+    __tablename__ = "owner_audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    registry_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    guild_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    actor_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    action: Mapped[str] = mapped_column(String(50))
+    details: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)

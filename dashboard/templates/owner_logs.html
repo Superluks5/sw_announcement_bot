@@ -1,0 +1,15 @@
+{% extends "owner_base.html" %}
+{% block page_title %}📜 Bot Logs{% endblock %}
+{% block content %}
+<form method="GET" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px;">
+    <input type="text" name="q" value="{{ query }}" placeholder="Search log text" style="min-width:240px; flex:1;">
+    <select name="level"><option value="all" {{ 'selected' if level == 'all' }}>All levels</option><option value="info" {{ 'selected' if level == 'info' }}>Info</option><option value="warning" {{ 'selected' if level == 'warning' }}>Warning</option><option value="error" {{ 'selected' if level == 'error' }}>Error</option></select>
+    <button type="submit">Filter</button>
+</form>
+{% for entry in logs %}
+<div style="background:var(--panel); border-left:3px solid {{ '#dc2626' if entry.level == 'error' else '#d4a72c' if entry.level == 'warning' else '#33301f' }}; border-radius:4px; padding:10px 14px; margin-bottom:6px; font-size:12.5px;">
+    <div style="color:var(--text-faint); font-size:11px; margin-bottom:4px;">{{ entry.time_display }} · {{ entry.level|upper }}</div>
+    <div style="white-space:pre-wrap; font-family:monospace; color:var(--text);">{{ entry.message }}</div>
+</div>
+{% else %}<p class="hint">No matching logs.</p>{% endfor %}
+{% endblock %}
