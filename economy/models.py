@@ -230,6 +230,18 @@ class GuildRegistry(Base):
     decided_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     invite_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     invite_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    invite_error: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    bot_present: Mapped[bool] = mapped_column(default=False)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_left_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    member_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    channel_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    role_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    permission_summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    snapshot: Mapped[str | None] = mapped_column(String(5000), nullable=True)
+    review_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class OwnerAuditLog(Base):

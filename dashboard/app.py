@@ -875,7 +875,9 @@ def owner_dashboard_page():
         stats={
             "total": len(servers),
             "pending": sum(server.status == "pending" for server in servers),
+            "review": sum(server.status == "review" for server in servers),
             "approved": sum(server.status == "approved" for server in servers),
+            "removed": sum(server.status == "removed" for server in servers),
             "disabled": sum(server.status == "approved" and not server.bot_enabled for server in servers),
         },
         service_status=get_service_status("swbot"),
@@ -908,6 +910,104 @@ def owner_servers_page():
         query=request.args.get("q", ""),
         status=status,
     )
+
+
+def bot_api_headers() -> dict[str, str]:
+    return {"Authorization": f"Bot {DISCORD_TOKEN}"} if DISCORD_TOKEN else {}
+
+
+def refresh_discovered_servers() -> tuple[int, int]:
+    if not DISCORD_TOKEN:
+        return 0, 0
+    response = requests.get(
+        "https://discord.com/api/v10/users/@me/guilds?with_counts=true",
+        headers=bot_api_headers(),
+        timeout=10,
+    )
+    response.raise_for_status()
+    discovered = 0
+    present_ids = set()
+    for guild in response.json():
+        guild_id = int(guild["id"])
+        present_ids.add(guild_id)
+        entry = reg.get_request_for_guild(guild_id)
+        if entry is None:
+            entry = reg.auto_register_pending(
+                guild_id,
+                guild.get("name", "Unknown server"),
+                0,
+                "Unknown",
+            )
+            discovered += 1
+        snapshot = json.dumps({
+            "name": guild.get("name"),
+            "owner_id": guild.get("owner_id"),
+            "member_count": guild.get("approximate_member_count"),
+            "channel_count": None,
+            "role_count": None,
+            "permissions": entry.permission_summary or "Not available from dashboard refresh",
+        })
+        reg.update_presence(
+            entry.id,
+            True,
+            guild.get("name"),
+            guild.get("approximate_member_count"),
+            None,
+            None,
+            entry.permission_summary,
+            snapshot,
+        )
+
+    missing = 0
+    for entry in reg.list_all():
+        if entry.guild_id not in present_ids and entry.bot_present:
+            reg.update_presence(entry.id, False)
+            missing += 1
+    return discovered, missing
+
+
+def create_review_invite(guild_id: int) -> tuple[str | None, str | None]:
+    if not DISCORD_TOKEN:
+        return None, "DISCORD_TOKEN is not configured"
+    channels_response = requests.get(
+        f"https://discord.com/api/v10/guilds/{guild_id}/channels",
+        headers=bot_api_headers(),
+        timeout=10,
+    )
+    if channels_response.status_code != 200:
+        return None, f"Could not read server channels ({channels_response.status_code})"
+    channels = [channel for channel in channels_response.json() if channel.get("type") == 0]
+    if not channels:
+        return None, "No text channels available"
+    last_error = "Bot lacks Create Invite permission"
+    for channel in channels:
+        response = requests.post(
+            f"https://discord.com/api/v10/channels/{channel['id']}/invites",
+            headers={**bot_api_headers(), "Content-Type": "application/json"},
+            json={"max_age": 0, "max_uses": 0, "unique": True, "reason": "Owner Panel review invite"},
+            timeout=10,
+        )
+        if response.status_code == 200:
+            return response.json().get("url"), None
+        last_error = response.text[:300]
+    return None, last_error
+
+
+def invite_code(invite_url: str | None) -> str | None:
+    if not invite_url:
+        return None
+    return invite_url.rstrip("/").rsplit("/", 1)[-1] or None
+
+
+@app.route("/owner/servers/refresh", methods=["POST"])
+@super_admin_required
+def owner_refresh_servers():
+    try:
+        discovered, missing = refresh_discovered_servers()
+        flash(f"Discovery complete: {discovered} new server(s), {missing} server(s) no longer contain the bot.", "success")
+    except Exception as e:
+        flash(f"Server discovery failed: {e}", "error")
+    return redirect(url_for("owner_servers_page"))
 
 
 @app.route("/owner/servers/<int:registry_id>")
@@ -1129,6 +1229,61 @@ def owner_resend_invite(registry_id):
         return redirect(url_for("owner_server_detail", registry_id=registry_id))
     reg.record_owner_action(int(session["user_id"]), "invite_resent", entry, "Approval invite sent")
     flash(f"Invite sent to {entry.owner_discord_name}.", "success")
+    return redirect(url_for("owner_server_detail", registry_id=registry_id))
+
+
+@app.route("/owner/servers/<int:registry_id>/review", methods=["POST"])
+@super_admin_required
+def owner_start_review(registry_id):
+    entry = reg.start_review(registry_id, int(session["user_id"]))
+    if entry:
+        reg.record_owner_action(int(session["user_id"]), "review_started", entry, "Server marked under review")
+        flash(f"{entry.guild_name} is now under review.", "success")
+    else:
+        flash("Server record not found.", "error")
+    return redirect(url_for("owner_server_detail", registry_id=registry_id))
+
+
+@app.route("/owner/servers/<int:registry_id>/regenerate-invite", methods=["POST"])
+@super_admin_required
+def owner_regenerate_invite(registry_id):
+    entry = next((server for server in reg.list_all() if server.id == registry_id), None)
+    if entry is None:
+        flash("Server record not found.", "error")
+        return redirect(url_for("owner_servers_page"))
+    invite_url, error = create_review_invite(entry.guild_id)
+    if not invite_url:
+        reg.set_invite_error(registry_id, error or "Invite creation failed")
+        flash(f"Could not create invite: {error}", "error")
+        return redirect(url_for("owner_server_detail", registry_id=registry_id))
+    reg.set_invite(registry_id, invite_url)
+    reg.record_owner_action(int(session["user_id"]), "invite_regenerated", entry, "Review invite regenerated")
+    flash("Review invite regenerated.", "success")
+    return redirect(url_for("owner_server_detail", registry_id=registry_id))
+
+
+@app.route("/owner/servers/<int:registry_id>/revoke-invite", methods=["POST"])
+@super_admin_required
+def owner_revoke_invite(registry_id):
+    entry = next((server for server in reg.list_all() if server.id == registry_id), None)
+    if entry is None:
+        flash("Server record not found.", "error")
+        return redirect(url_for("owner_servers_page"))
+    code = invite_code(entry.invite_url)
+    if not code:
+        flash("No stored invite to revoke.", "error")
+        return redirect(url_for("owner_server_detail", registry_id=registry_id))
+    response = requests.delete(
+        f"https://discord.com/api/v10/invites/{code}",
+        headers=bot_api_headers(),
+        timeout=10,
+    )
+    if response.status_code not in (200, 204, 404):
+        flash(f"Could not revoke invite ({response.status_code}).", "error")
+        return redirect(url_for("owner_server_detail", registry_id=registry_id))
+    reg.clear_invite(registry_id)
+    reg.record_owner_action(int(session["user_id"]), "invite_revoked", entry, "Review invite revoked")
+    flash("Review invite revoked.", "success")
     return redirect(url_for("owner_server_detail", registry_id=registry_id))
 
 

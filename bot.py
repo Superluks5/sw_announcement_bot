@@ -178,12 +178,14 @@ async def sync_approved_guild_commands():
     return synced_guilds, total
 
 
-async def create_guild_invite(guild: discord.Guild) -> str | None:
-    """Create a reusable invite before leaving an unapproved guild."""
+async def create_guild_invite(guild: discord.Guild) -> tuple[str | None, str | None]:
+    """Create a reusable invite and return a useful failure reason."""
     me = guild.me
     if me is None:
-        return None
+        return None, "Bot member is not available in the guild cache"
+    checked_channels = 0
     for channel in guild.text_channels:
+        checked_channels += 1
         permissions = channel.permissions_for(me)
         if not permissions.create_instant_invite:
             continue
@@ -194,10 +196,42 @@ async def create_guild_invite(guild: discord.Guild) -> str | None:
                 unique=True,
                 reason="Owner Panel review invite",
             )
-            return invite.url
-        except discord.HTTPException:
-            continue
-    return None
+            return invite.url, None
+        except discord.HTTPException as error:
+            return None, str(error)
+    if checked_channels == 0:
+        return None, "No text channels available"
+    return None, "Bot lacks Create Invite permission in every text channel"
+
+
+def guild_snapshot(guild: discord.Guild) -> tuple[int, int, int, str, str]:
+    me = guild.me
+    permission_summary = "member unavailable"
+    if me is not None:
+        permissions = [
+            name for name, allowed in {
+                "administrator": me.guild_permissions.administrator,
+                "create_invite": me.guild_permissions.create_instant_invite,
+                "view_channels": me.guild_permissions.view_channel,
+                "send_messages": me.guild_permissions.send_messages,
+            }.items() if allowed
+        ]
+        permission_summary = ", ".join(permissions) or "no key permissions"
+    snapshot = json.dumps({
+        "name": guild.name,
+        "owner_id": guild.owner_id,
+        "member_count": guild.member_count,
+        "channel_count": len(guild.channels),
+        "role_count": len(guild.roles),
+        "permissions": permission_summary,
+    }, ensure_ascii=True)
+    return (
+        guild.member_count or 0,
+        len(guild.channels),
+        len(guild.roles),
+        permission_summary,
+        snapshot,
+    )
 
 
 async def sync_discovered_guilds():
@@ -205,6 +239,11 @@ async def sync_discovered_guilds():
     import sys
     sys.path.insert(0, os.path.dirname(__file__))
     from economy.services import registry_service as reg
+
+    current_ids = {guild.id for guild in bot.guilds}
+    for entry in reg.list_all():
+        if entry.guild_id not in current_ids and entry.bot_present:
+            reg.update_presence(entry.id, False)
 
     discovered = 0
     for guild in bot.guilds:
@@ -223,10 +262,18 @@ async def sync_discovered_guilds():
                 str(owner) if owner else "Unknown",
             )
             discovered += 1
-        if entry.invite_url is None:
-            invite_url = await create_guild_invite(guild)
+        member_count, channel_count, role_count, permissions, snapshot = guild_snapshot(guild)
+        invite_url = entry.invite_url
+        invite_error = None
+        if invite_url is None:
+            invite_url, invite_error = await create_guild_invite(guild)
             if invite_url:
-                reg.set_invite(entry.id, invite_url)
+                entry = reg.set_invite(entry.id, invite_url)
+            else:
+                reg.set_invite_error(entry.id, invite_error or "Unknown invite error")
+        reg.update_presence(
+            entry.id, True, guild.name, member_count, channel_count, role_count, permissions, snapshot
+        )
 
     if discovered:
         await send_log(f"🔎 Discovered **{discovered}** existing server(s) and added them to the Owner Panel.")
@@ -294,9 +341,13 @@ async def on_guild_join(guild: discord.Guild):
     owner_id = guild.owner_id or 0
 
     entry = reg.auto_register_pending(guild.id, guild.name, owner_id, owner_name)
-    invite_url = await create_guild_invite(guild)
+    invite_url, invite_error = await create_guild_invite(guild)
     if invite_url:
         entry = reg.set_invite(entry.id, invite_url)
+    else:
+        reg.set_invite_error(entry.id, invite_error or "Unknown invite error")
+    member_count, channel_count, role_count, permissions, snapshot = guild_snapshot(guild)
+    reg.update_presence(entry.id, True, guild.name, member_count, channel_count, role_count, permissions, snapshot)
 
     dashboard_url = os.environ.get("DASHBOARD_PUBLIC_URL", "the dashboard")
     dm_text = (
@@ -333,6 +384,12 @@ async def on_guild_join(guild: discord.Guild):
 
 @bot.event
 async def on_guild_remove(guild: discord.Guild):
+    import sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from economy.services import registry_service as reg
+    entry = reg.get_request_for_guild(guild.id)
+    if entry:
+        reg.update_presence(entry.id, False)
     await send_log(f"👋 Bot was removed from **{guild.name}** (ID: `{guild.id}`).", level="warning")
 
 

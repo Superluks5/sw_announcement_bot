@@ -5,6 +5,8 @@
             .status-approved { color: #86efac; }
             .status-denied { color: #fca5a5; }
             .status-pending { color: #f2d78a; }
+            .status-review { color: #60a5fa; }
+            .status-removed { color: var(--text-faint); }
             .bot-on { color: #86efac; }
             .bot-off { color: #fca5a5; }
             .btn-remove { background: #7f1d1d; }
@@ -12,30 +14,39 @@
         </style>
 
         <p class="hint">Every community that's requested or been given access to the shared bot.</p>
+        <form method="POST" action="{{ url_for('owner_refresh_servers') }}" style="margin-bottom:16px;">
+            <button type="submit">Refresh server discovery</button>
+        </form>
 
         <form method="GET" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
             <input type="text" name="q" value="{{ query }}" placeholder="Search server, owner, or ID" style="min-width:240px; flex:1;">
             <select name="status">
                 <option value="all" {{ 'selected' if status == 'all' }}>All statuses</option>
                 <option value="pending" {{ 'selected' if status == 'pending' }}>Pending</option>
+                <option value="review" {{ 'selected' if status == 'review' }}>Under review</option>
                 <option value="approved" {{ 'selected' if status == 'approved' }}>Approved</option>
                 <option value="denied" {{ 'selected' if status == 'denied' }}>Denied</option>
+                <option value="removed" {{ 'selected' if status == 'removed' }}>Removed</option>
             </select>
             <button type="submit">Filter</button>
         </form>
 
         <table>
             <thead>
-                <tr><th>Server</th><th>Owner</th><th>Status</th><th>Bot</th><th>Requested</th><th></th></tr>
+                <tr><th>Server</th><th>Owner</th><th>Status</th><th>Presence</th><th>Bot</th><th>Requested</th><th></th></tr>
             </thead>
             <tbody>
                 {% for r in servers %}
-                {% set status_class = 'status-approved' if r.status == 'approved' else 'status-denied' if r.status == 'denied' else 'status-pending' %}
+                {% set status_class = 'status-approved' if r.status == 'approved' else 'status-denied' if r.status == 'denied' else 'status-review' if r.status == 'review' else 'status-removed' if r.status == 'removed' else 'status-pending' %}
                 {% set bot_class = 'bot-on' if r.bot_enabled else 'bot-off' %}
                 <tr>
                     <td><a href="{{ url_for('owner_server_detail', registry_id=r.id) }}">{{ r.guild_name }}</a><br><span style="color: var(--text-faint); font-size: 11px;">ID: {{ r.guild_id }}</span>{% if r.note %}<br><span style="color: var(--text-faint); font-size: 11px; font-style: italic;">{{ r.note }}</span>{% endif %}{% if r.invite_url %}<br><a href="{{ r.invite_url }}" target="_blank" rel="noopener" style="color: #f2d78a; font-size: 11px;">🔗 Join server to review</a>{% else %}<br><span style="color: var(--text-faint); font-size: 11px;">No invite available</span>{% endif %}</td>
                     <td>{{ r.owner_discord_name }}</td>
                     <td class="{{ status_class }}">{{ r.status|upper }}</td>
+                    <td>
+                        <span class="{{ 'bot-on' if r.bot_present else 'bot-off' }}">{{ 'PRESENT' if r.bot_present else 'LEFT' }}</span>
+                        {% if r.last_seen_at %}<br><span style="color: var(--text-faint); font-size: 11px;">Seen {{ r.last_seen_at.strftime('%b %d, %H:%M') }}</span>{% endif %}
+                    </td>
                     <td>
                         {% if r.status == 'approved' %}
                         <span class="{{ bot_class }}">{{ 'ON' if r.bot_enabled else 'OFF' }}</span>
@@ -63,7 +74,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" style="color: var(--text-faint);"><em>No servers yet.</em></td></tr>
+                <tr><td colspan="7" style="color: var(--text-faint);"><em>No servers yet.</em></td></tr>
                 {% endfor %}
             </tbody>
         </table>

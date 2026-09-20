@@ -10,6 +10,11 @@ from economy.db import SessionLocal
 from economy.models import GuildRegistry, OwnerAuditLog
 
 
+def _now():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc)
+
+
 def request_access(guild_id: int, guild_name: str, owner_discord_id: int, owner_discord_name: str, note: str = None) -> GuildRegistry:
     with SessionLocal() as session:
         existing = session.query(GuildRegistry).filter_by(guild_id=guild_id).one_or_none()
@@ -101,11 +106,23 @@ def auto_register_pending(guild_id: int, guild_name: str, owner_discord_id: int,
     with SessionLocal() as session:
         existing = session.query(GuildRegistry).filter_by(guild_id=guild_id).one_or_none()
         if existing:
-            return existing  # already known (pending/approved/denied) - don't overwrite a decision
+            if existing.status == "removed":
+                existing.status = "pending"
+                existing.bot_enabled = True
+                existing.removed_at = None
+            existing.guild_name = guild_name
+            existing.owner_discord_id = owner_discord_id or existing.owner_discord_id
+            existing.owner_discord_name = owner_discord_name or existing.owner_discord_name
+            existing.bot_present = True
+            existing.last_seen_at = _now()
+            session.commit()
+            session.refresh(existing)
+            return existing
 
         entry = GuildRegistry(
             guild_id=guild_id, guild_name=guild_name, owner_discord_id=owner_discord_id,
             owner_discord_name=owner_discord_name, status="pending", note="Auto-created: bot was invited directly",
+            bot_present=True, last_seen_at=_now(),
         )
         session.add(entry)
         session.commit()
@@ -114,14 +131,79 @@ def auto_register_pending(guild_id: int, guild_name: str, owner_discord_id: int,
 
 
 def set_invite(registry_id: int, invite_url: str):
-    from datetime import datetime, timezone
     with SessionLocal() as session:
         entry = session.get(GuildRegistry, registry_id)
         if entry:
             entry.invite_url = invite_url
-            entry.invite_created_at = datetime.now(timezone.utc)
+            entry.invite_created_at = _now()
+            entry.invite_error = None
             session.commit()
             session.refresh(entry)
+        return entry
+
+
+def set_invite_error(registry_id: int, error: str):
+    with SessionLocal() as session:
+        entry = session.get(GuildRegistry, registry_id)
+        if entry:
+            entry.invite_error = error[:300]
+            session.commit()
+            session.refresh(entry)
+        return entry
+
+
+def clear_invite(registry_id: int):
+    with SessionLocal() as session:
+        entry = session.get(GuildRegistry, registry_id)
+        if entry:
+            entry.invite_url = None
+            entry.invite_created_at = None
+            entry.invite_error = None
+            session.commit()
+            session.refresh(entry)
+        return entry
+
+
+def update_presence(
+    registry_id: int,
+    present: bool,
+    guild_name: str | None = None,
+    member_count: int | None = None,
+    channel_count: int | None = None,
+    role_count: int | None = None,
+    permission_summary: str | None = None,
+    snapshot: str | None = None,
+):
+    with SessionLocal() as session:
+        entry = session.get(GuildRegistry, registry_id)
+        if entry:
+            entry.bot_present = present
+            if guild_name:
+                entry.guild_name = guild_name
+            if present:
+                entry.last_seen_at = _now()
+            else:
+                entry.last_left_at = _now()
+            entry.member_count = member_count
+            entry.channel_count = channel_count
+            entry.role_count = role_count
+            entry.permission_summary = permission_summary
+            entry.snapshot = snapshot
+            session.commit()
+            session.refresh(entry)
+        return entry
+
+
+def start_review(registry_id: int, actor_id: int) -> GuildRegistry | None:
+    with SessionLocal() as session:
+        entry = session.get(GuildRegistry, registry_id)
+        if entry is None:
+            return None
+        entry.status = "review"
+        entry.review_started_at = _now()
+        entry.reviewed_by = actor_id
+        session.commit()
+        session.refresh(entry)
         return entry
 
 
@@ -134,13 +216,16 @@ def set_bot_enabled(registry_id: int, enabled: bool):
 
 
 def remove(registry_id: int) -> GuildRegistry | None:
-    """Remove a server so a future invite must go through approval again."""
+    """Preserve the server record while marking it removed."""
     with SessionLocal() as session:
         entry = session.get(GuildRegistry, registry_id)
         if entry is None:
             return None
-        session.delete(entry)
+        entry.status = "removed"
+        entry.bot_present = False
+        entry.removed_at = _now()
         session.commit()
+        session.refresh(entry)
         return entry
 
 

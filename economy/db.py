@@ -69,6 +69,23 @@ def _ensure_guild_registry_columns():
             conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN invite_url VARCHAR(500)")
         if "invite_created_at" not in columns:
             conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN invite_created_at DATETIME")
+        additions = {
+            "invite_error": "VARCHAR(300)",
+            "bot_present": "BOOLEAN DEFAULT 0",
+            "last_seen_at": "DATETIME",
+            "last_left_at": "DATETIME",
+            "member_count": "INTEGER",
+            "channel_count": "INTEGER",
+            "role_count": "INTEGER",
+            "permission_summary": "VARCHAR(500)",
+            "snapshot": "VARCHAR(5000)",
+            "review_started_at": "DATETIME",
+            "reviewed_by": "BIGINT",
+            "removed_at": "DATETIME",
+        }
+        for column, definition in additions.items():
+            if column not in columns:
+                conn.exec_driver_sql(f"ALTER TABLE guild_registry ADD COLUMN {column} {definition}")
 
 
 def init_db():

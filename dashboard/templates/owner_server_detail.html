@@ -19,15 +19,21 @@
     <div class="detail"><label>Decision</label><strong>{{ server.decided_at.strftime('%b %d, %Y %H:%M') if server.decided_at else 'Not decided' }}</strong></div>
     <div class="detail"><label>Note</label><strong>{{ server.note or 'No note' }}</strong></div>
     <div class="detail"><label>Review invite</label>{% if server.invite_url %}<a href="{{ server.invite_url }}" target="_blank" rel="noopener">Join this server</a><br><span class="hint">Created {{ server.invite_created_at.strftime('%b %d, %Y %H:%M') if server.invite_created_at else 'unknown time' }}</span>{% else %}<strong>No invite available</strong><br><span class="hint">The bot may not have Create Invite permission in this server.</span>{% endif %}</div>
+    <div class="detail"><label>Bot presence</label><strong>{{ 'PRESENT' if server.bot_present else 'LEFT / UNKNOWN' }}</strong><br><span class="hint">Last seen: {{ server.last_seen_at.strftime('%b %d, %Y %H:%M') if server.last_seen_at else 'Never' }}{% if server.last_left_at %}<br>Last left: {{ server.last_left_at.strftime('%b %d, %Y %H:%M') }}{% endif %}</span></div>
+    <div class="detail"><label>Server snapshot</label><strong>{{ server.member_count if server.member_count is not none else '?' }} members</strong><br><span class="hint">{{ server.channel_count if server.channel_count is not none else '?' }} channels · {{ server.role_count if server.role_count is not none else '?' }} roles<br>{{ server.permission_summary or 'Permissions not recorded' }}</span></div>
+    {% if server.invite_error %}<div class="detail"><label>Invite diagnostics</label><strong>{{ server.invite_error }}</strong></div>{% endif %}
 </div>
 <div class="actions">
-    {% if server.status == 'pending' %}
+    {% if server.status in ('pending', 'review') %}
+    <form method="POST" action="{{ url_for('owner_start_review', registry_id=server.id) }}"><button class="btn-secondary">Mark under review</button></form>
     <form method="POST" action="{{ url_for('owner_decide', registry_id=server.id) }}"><button name="decision" value="approve">Approve</button></form>
     <form method="POST" action="{{ url_for('owner_decide', registry_id=server.id) }}"><button name="decision" value="deny" class="btn-danger">Deny</button></form>
     {% elif server.status == 'approved' %}
     <form method="POST" action="{{ url_for('owner_toggle_enabled', registry_id=server.id) }}"><button class="btn-secondary">{{ 'Disable bot' if server.bot_enabled else 'Enable bot' }}</button></form>
     <form method="POST" action="{{ url_for('owner_resend_invite', registry_id=server.id) }}"><button class="btn-secondary">Resend invite</button></form>
     {% endif %}
+    <form method="POST" action="{{ url_for('owner_regenerate_invite', registry_id=server.id) }}"><button class="btn-secondary">Regenerate review invite</button></form>
+    {% if server.invite_url %}<form method="POST" action="{{ url_for('owner_revoke_invite', registry_id=server.id) }}" onsubmit="return confirm('Revoke this review invite?');"><button class="btn-danger">Revoke review invite</button></form>{% endif %}
     <form method="POST" action="{{ url_for('owner_remove_server', registry_id=server.id) }}" onsubmit="return confirm('Remove the bot from this server?');"><button class="btn-danger">Remove server</button></form>
 </div>
 <h2>Audit history</h2>
