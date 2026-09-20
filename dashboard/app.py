@@ -115,6 +115,39 @@ ROADMAP_STATUSES = {
 _roles_cache = {"data": None, "fetched_at": 0}
 _members_cache = {"data": None, "fetched_at": 0}
 _channels_cache = {"data": None, "fetched_at": 0}
+_bot_identity_cache = {"id": None, "checked_at": 0}
+
+
+def get_main_bot_id() -> str | None:
+    """Return the application/user ID belonging to DISCORD_TOKEN."""
+    if not DISCORD_TOKEN:
+        return None
+    if _bot_identity_cache["id"] and time.time() - _bot_identity_cache["checked_at"] < 300:
+        return _bot_identity_cache["id"]
+    try:
+        response = requests.get(
+            "https://discord.com/api/v10/users/@me",
+            headers={"Authorization": f"Bot {DISCORD_TOKEN}"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        bot_id = response.json().get("id")
+        _bot_identity_cache["id"] = bot_id
+        _bot_identity_cache["checked_at"] = time.time()
+        return bot_id
+    except requests.RequestException:
+        return None
+
+
+def oauth_matches_main_bot() -> tuple[bool, str | None]:
+    main_bot_id = get_main_bot_id()
+    if not main_bot_id:
+        return False, "The main bot token could not be verified."
+    if not DISCORD_CLIENT_ID:
+        return False, "DISCORD_CLIENT_ID is not configured."
+    if DISCORD_CLIENT_ID != main_bot_id:
+        return False, "DISCORD_CLIENT_ID belongs to a different Discord application."
+    return True, None
 
 
 def fetch_guild_channels() -> list[dict]:
@@ -327,6 +360,14 @@ def health_check():
 def login():
     if not DISCORD_CLIENT_ID:
         return "DISCORD_CLIENT_ID isn't set in .env yet - see setup notes.", 500
+    matches_main_bot, identity_error = oauth_matches_main_bot()
+    if not matches_main_bot:
+        return (
+            "Dashboard OAuth is not configured for the running main bot. "
+            f"{identity_error} Set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET "
+            "from the same Discord Developer Portal application as DISCORD_TOKEN.",
+            500,
+        )
     params = {
         "client_id": DISCORD_CLIENT_ID,
         "redirect_uri": DISCORD_REDIRECT_URI,
@@ -346,6 +387,15 @@ def callback():
     if not code or not state or not secrets.compare_digest(state, session.pop("oauth_state", "")):
         flash("Login was cancelled or failed.", "error")
         return redirect(url_for("login"))
+
+    matches_main_bot, identity_error = oauth_matches_main_bot()
+    if not matches_main_bot:
+        return (
+            "Dashboard OAuth is not configured for the running main bot. "
+            f"{identity_error} Update the VM's DISCORD_CLIENT_ID and "
+            "DISCORD_CLIENT_SECRET values.",
+            500,
+        )
 
     token_resp = requests.post(
         "https://discord.com/api/oauth2/token",

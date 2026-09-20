@@ -21,6 +21,9 @@ Groq's free AI API, formats it using your server template, and posts it.
 3. **Configure:**
    - Rename `.env.example` to `.env`
    - Fill in `DISCORD_TOKEN`, `GROQ_API_KEY`, and `SERVER_NAME`
+    - `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` must come from the same
+       Discord Developer Portal application as `DISCORD_TOKEN`; do not use a
+       DEV bot application's OAuth credentials for the dashboard.
    - `GUILD_ID` is optional and keeps one legacy/primary server registered;
      additional servers are loaded from the approved-server registry
    - The dashboard approval link grants Administrator by default. Set
