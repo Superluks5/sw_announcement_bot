@@ -30,6 +30,26 @@
         .main { flex: 1; min-width: 0; padding: 20px 28px 40px; }
         .hud-bar { display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto 22px; flex-wrap: wrap; gap: 10px; }
         .hud-title { font-size: 20px; color: var(--gold); }
+        .hud-right { display: flex; align-items: center; gap: 10px; position: relative; }
+        .menu-btn {
+            width: 34px; height: 34px; border-radius: 6px; background: var(--panel-alt);
+            border: 1px solid var(--border); color: var(--text-dim); cursor: pointer;
+            font-size: 16px; display: flex; align-items: center; justify-content: center;
+        }
+        .menu-btn:hover { background: #282316; border-color: var(--border-bright); }
+        .dropdown {
+            position: absolute; top: 42px; right: 0; min-width: 200px;
+            background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+            padding: 10px; z-index: 20; box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: none;
+        }
+        .dropdown.open { display: block; }
+        .dropdown-row { padding: 8px 10px; font-size: 12.5px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+        .dropdown-divider { height: 1px; background: var(--border); margin: 6px 0; }
+        .dropdown-link { display: block; padding: 8px 10px; border-radius: 5px; font-size: 13px; color: var(--text); text-decoration: none; }
+        .dropdown-link:hover { background: var(--panel-alt); }
+        .status-dot { width: 7px; height: 7px; border-radius: 50%; }
+        .status-dot.online { background: #22c55e; }
+        .status-dot.offline { background: #dc2626; }
         .warn-banner {
             background: rgba(212,167,44,0.1); border: 1px solid var(--gold-dim); color: #f2d78a;
             padding: 10px 14px; border-radius: 6px; font-size: 12.5px; margin-bottom: 20px; max-width: 1200px; margin-left: auto; margin-right: auto;
@@ -60,13 +80,36 @@
             <a href="{{ url_for('owner_servers_page') }}" class="nav-item {{ 'active' if active_tab == 'owner_servers' }}"><span>🌐</span> Servers</a>
             <a href="{{ url_for('owner_logs_page') }}" class="nav-item {{ 'active' if active_tab == 'owner_logs' }}"><span>📜</span> Bot Logs</a>
             <a href="{{ url_for('owner_audit_page') }}" class="nav-item {{ 'active' if active_tab == 'owner_audit' }}"><span>🧾</span> Audit History</a>
-            <a href="{{ url_for('dashboard_home') }}" class="back-link">← Back to my server</a>
+            <a href="{{ url_for('dashboard_home') }}" class="back-link">← Back to Server Panel</a>
         </nav>
         <main class="main">
             <div class="hud-bar">
                 <h1 class="hud-title">{% block page_title %}{% endblock %}</h1>
-                <span style="color: var(--text-faint); font-size: 12px;">{{ username }}</span>
+                <div class="hud-right">
+                    <button class="menu-btn" onclick="toggleOwnerMenu(event)" aria-label="Menu">⋮</button>
+                    <div class="dropdown" id="ownerHeaderDropdown">
+                        <div class="dropdown-row">
+                            <span class="status-dot {{ 'online' if global_bot_status.active else 'offline' }}"></span>
+                            {{ 'Bot Online' if global_bot_status.active else 'Bot Offline' }}
+                        </div>
+                        <div class="dropdown-row">👤 {{ username }}</div>
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-link" href="{{ url_for('dashboard_home') }}">🛰️ Server Panel</a>
+                        <a class="dropdown-link" href="{{ url_for('owner_dashboard_page') }}" style="color: #fbbf24;">🛡️ Owner Panel</a>
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-link" href="{{ url_for('logout') }}">Log out</a>
+                    </div>
+                </div>
             </div>
+            <script>
+            function toggleOwnerMenu(e) {
+                e.stopPropagation();
+                document.getElementById('ownerHeaderDropdown').classList.toggle('open');
+            }
+            document.addEventListener('click', () => {
+                document.getElementById('ownerHeaderDropdown').classList.remove('open');
+            });
+            </script>
             <div class="warn-banner">🛡️ You're in the Owner Panel - this manages every community using the shared bot, not just your own server.</div>
             <div class="container">
                 {% with messages = get_flashed_messages(with_categories=true) %}
