@@ -230,6 +230,7 @@ class GuildRegistry(Base):
     decided_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     invite_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     invite_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    invite_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     invite_error: Mapped[str | None] = mapped_column(String(300), nullable=True)
     bot_present: Mapped[bool] = mapped_column(default=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

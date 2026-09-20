@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="owner-csrf-token" content="{{ owner_csrf_token }}">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Owner Panel{% block title %}{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -102,6 +103,16 @@
                 </div>
             </div>
             <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const token = document.querySelector('meta[name="owner-csrf-token"]').content;
+                document.querySelectorAll('form[method="POST"], form[method="post"]').forEach((form) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'csrf_token';
+                    input.value = token;
+                    form.appendChild(input);
+                });
+            });
             function toggleOwnerMenu(e) {
                 e.stopPropagation();
                 document.getElementById('ownerHeaderDropdown').classList.toggle('open');

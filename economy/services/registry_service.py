@@ -130,12 +130,14 @@ def auto_register_pending(guild_id: int, guild_name: str, owner_discord_id: int,
         return entry
 
 
-def set_invite(registry_id: int, invite_url: str):
+def set_invite(registry_id: int, invite_url: str, max_age: int = 86400):
+    from datetime import timedelta
     with SessionLocal() as session:
         entry = session.get(GuildRegistry, registry_id)
         if entry:
             entry.invite_url = invite_url
             entry.invite_created_at = _now()
+            entry.invite_expires_at = _now() + timedelta(seconds=max_age) if max_age else None
             entry.invite_error = None
             session.commit()
             session.refresh(entry)
@@ -158,6 +160,7 @@ def clear_invite(registry_id: int):
         if entry:
             entry.invite_url = None
             entry.invite_created_at = None
+            entry.invite_expires_at = None
             entry.invite_error = None
             session.commit()
             session.refresh(entry)
@@ -202,6 +205,33 @@ def start_review(registry_id: int, actor_id: int) -> GuildRegistry | None:
         entry.status = "review"
         entry.review_started_at = _now()
         entry.reviewed_by = actor_id
+        session.commit()
+        session.refresh(entry)
+        return entry
+
+
+def update_note(registry_id: int, note: str | None) -> GuildRegistry | None:
+    with SessionLocal() as session:
+        entry = session.get(GuildRegistry, registry_id)
+        if entry is None:
+            return None
+        entry.note = note[:500] if note else None
+        session.commit()
+        session.refresh(entry)
+        return entry
+
+
+def set_status(registry_id: int, status: str, actor_id: int) -> GuildRegistry | None:
+    allowed = {"pending", "review", "approved", "denied", "info_requested", "removed"}
+    if status not in allowed:
+        raise ValueError("Unsupported registry status")
+    with SessionLocal() as session:
+        entry = session.get(GuildRegistry, registry_id)
+        if entry is None:
+            return None
+        entry.status = status
+        entry.reviewed_by = actor_id
+        entry.review_started_at = _now() if status in {"review", "info_requested"} else entry.review_started_at
         session.commit()
         session.refresh(entry)
         return entry

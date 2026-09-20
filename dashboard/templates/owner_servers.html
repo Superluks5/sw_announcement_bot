@@ -6,6 +6,7 @@
             .status-denied { color: #fca5a5; }
             .status-pending { color: #f2d78a; }
             .status-review { color: #60a5fa; }
+            .status-info_requested { color: #c084fc; }
             .status-removed { color: var(--text-faint); }
             .bot-on { color: #86efac; }
             .bot-off { color: #fca5a5; }
@@ -24,6 +25,7 @@
                 <option value="all" {{ 'selected' if status == 'all' }}>All statuses</option>
                 <option value="pending" {{ 'selected' if status == 'pending' }}>Pending</option>
                 <option value="review" {{ 'selected' if status == 'review' }}>Under review</option>
+                <option value="info_requested" {{ 'selected' if status == 'info_requested' }}>Info requested</option>
                 <option value="approved" {{ 'selected' if status == 'approved' }}>Approved</option>
                 <option value="denied" {{ 'selected' if status == 'denied' }}>Denied</option>
                 <option value="removed" {{ 'selected' if status == 'removed' }}>Removed</option>
@@ -37,7 +39,7 @@
             </thead>
             <tbody>
                 {% for r in servers %}
-                {% set status_class = 'status-approved' if r.status == 'approved' else 'status-denied' if r.status == 'denied' else 'status-review' if r.status == 'review' else 'status-removed' if r.status == 'removed' else 'status-pending' %}
+                {% set status_class = 'status-approved' if r.status == 'approved' else 'status-denied' if r.status == 'denied' else 'status-review' if r.status == 'review' else 'status-info_requested' if r.status == 'info_requested' else 'status-removed' if r.status == 'removed' else 'status-pending' %}
                 {% set bot_class = 'bot-on' if r.bot_enabled else 'bot-off' %}
                 <tr>
                     <td><a href="{{ url_for('owner_server_detail', registry_id=r.id) }}">{{ r.guild_name }}</a><br><span style="color: var(--text-faint); font-size: 11px;">ID: {{ r.guild_id }}</span>{% if r.note %}<br><span style="color: var(--text-faint); font-size: 11px; font-style: italic;">{{ r.note }}</span>{% endif %}{% if r.invite_url %}<br><a href="{{ r.invite_url }}" target="_blank" rel="noopener" style="color: #f2d78a; font-size: 11px;">🔗 Join server to review</a>{% else %}<br><span style="color: var(--text-faint); font-size: 11px;">No invite available</span>{% endif %}</td>

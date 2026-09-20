@@ -30,6 +30,7 @@
         <p><strong class="{{ 'ok' if service_status.active else 'error' }}">{{ 'ONLINE' if service_status.active else 'OFFLINE' }}</strong></p>
         <p class="hint">Service: swbot{% if service_status.active is not none %} · State checked now{% endif %}</p>
         <a class="btn" href="{{ url_for('owner_servers_page') }}">Manage servers</a>
+        <form method="POST" action="{{ url_for('owner_backup_database') }}" style="display:inline; margin-left:6px;"><button class="btn-secondary">Backup database</button></form>
     </section>
     <section class="owner-panel">
         <h2>Recent audit actions</h2>

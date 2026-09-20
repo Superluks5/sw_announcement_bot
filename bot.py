@@ -11,10 +11,11 @@ import json
 import time
 import asyncio
 import traceback
+from datetime import datetime, timezone
 import discord
 import aiohttp
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
 from permissions import is_command_allowed, load_config, is_command_enabled, load_toggles, is_maintenance_blocking, load_maintenance
@@ -30,6 +31,7 @@ GUILD_ID = int(os.environ.get("GUILD_ID", 1535372103593894028))
 # Optional - add LOG_WEBHOOK_URL=... to your .env to get bot startup/error
 # notifications posted to a private log channel. Leave unset to disable.
 LOG_WEBHOOK_URL = os.environ.get("LOG_WEBHOOK_URL")
+REVIEW_INVITE_MAX_AGE = int(os.environ.get("REVIEW_INVITE_MAX_AGE", "86400"))
 
 LOCAL_LOG_FILE = os.path.join(os.path.dirname(__file__), "bot_logs.json")
 MAX_LOCAL_LOGS = 300
@@ -135,6 +137,25 @@ bot = commands.Bot(command_prefix="!", intents=intents, tree_cls=PermissionedTre
 bot.send_log = send_log
 
 
+@tasks.loop(minutes=10)
+async def sync_registry_periodically():
+    try:
+        await sync_discovered_guilds()
+    except Exception as error:
+        print(f"⚠️ Periodic server discovery failed: {error}")
+        await send_log(f"❌ Periodic server discovery failed: `{error}`", level="error")
+
+
+@sync_registry_periodically.before_loop
+async def before_sync_registry_periodically():
+    await bot.wait_until_ready()
+
+
+@sync_registry_periodically.error
+async def sync_registry_periodically_error(error: Exception):
+    await send_log(f"❌ Server discovery task stopped: `{error}`", level="error")
+
+
 @bot.event
 async def on_disconnect():
     await send_log("🔌 Discord connection lost. The bot is attempting to reconnect.", level="warning")
@@ -191,7 +212,7 @@ async def create_guild_invite(guild: discord.Guild) -> tuple[str | None, str | N
             continue
         try:
             invite = await channel.create_invite(
-                max_age=0,
+                max_age=REVIEW_INVITE_MAX_AGE,
                 max_uses=0,
                 unique=True,
                 reason="Owner Panel review invite",
@@ -264,11 +285,17 @@ async def sync_discovered_guilds():
             discovered += 1
         member_count, channel_count, role_count, permissions, snapshot = guild_snapshot(guild)
         invite_url = entry.invite_url
+        invite_expired = False
+        if entry.invite_expires_at:
+            expiry = entry.invite_expires_at
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+            invite_expired = expiry <= datetime.now(timezone.utc)
         invite_error = None
-        if invite_url is None:
+        if invite_url is None or invite_expired:
             invite_url, invite_error = await create_guild_invite(guild)
             if invite_url:
-                entry = reg.set_invite(entry.id, invite_url)
+                entry = reg.set_invite(entry.id, invite_url, REVIEW_INVITE_MAX_AGE)
             else:
                 reg.set_invite_error(entry.id, invite_error or "Unknown invite error")
         reg.update_presence(
@@ -343,7 +370,7 @@ async def on_guild_join(guild: discord.Guild):
     entry = reg.auto_register_pending(guild.id, guild.name, owner_id, owner_name)
     invite_url, invite_error = await create_guild_invite(guild)
     if invite_url:
-        entry = reg.set_invite(entry.id, invite_url)
+        entry = reg.set_invite(entry.id, invite_url, REVIEW_INVITE_MAX_AGE)
     else:
         reg.set_invite_error(entry.id, invite_error or "Unknown invite error")
     member_count, channel_count, role_count, permissions, snapshot = guild_snapshot(guild)
@@ -437,6 +464,7 @@ async def main():
         await send_log("🗄️ Economy database initialized successfully.")
 
         await load_cogs()
+        sync_registry_periodically.start()
         await bot.start(DISCORD_TOKEN)
 
 

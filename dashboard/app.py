@@ -9,6 +9,8 @@ import os
 import sys
 import json
 import time
+import secrets
+import shutil
 import subprocess
 from datetime import datetime
 from functools import wraps
@@ -26,7 +28,7 @@ from economy.services import balance_service as bs
 from economy.services import games_service as gsvc
 from economy.services import income_service as isvc
 from economy.services import registry_service as reg
-from economy.db import init_db as economy_init_db
+from economy.db import init_db as economy_init_db, DB_PATH
 
 economy_init_db()  # safe to call every startup - additive, never drops tables
 load_dotenv(os.path.join(BASE_DIR, ".env"))
@@ -44,6 +46,7 @@ DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI", "http://localhost:
 # Discord's Administrator permission bit. Override this with a narrower
 # permission integer in .env if the public bot should not be an administrator.
 BOT_INVITE_PERMISSIONS = os.environ.get("BOT_INVITE_PERMISSIONS", "8")
+REVIEW_INVITE_MAX_AGE = int(os.environ.get("REVIEW_INVITE_MAX_AGE", "86400"))
 
 ALLOWED_USER_IDS = {
     uid.strip() for uid in os.environ.get("DASHBOARD_ALLOWED_USER_IDS", "").split(",") if uid.strip()
@@ -232,6 +235,27 @@ def super_admin_required(view):
     return wrapped
 
 
+def owner_csrf_token() -> str:
+    token = session.get("owner_csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["owner_csrf_token"] = token
+    return token
+
+
+@app.before_request
+def protect_owner_posts():
+    if request.method == "POST" and request.path.startswith("/owner/"):
+        expected = session.get("owner_csrf_token")
+        if not expected or not secrets.compare_digest(request.form.get("csrf_token", ""), expected):
+            return "Invalid or missing security token.", 400
+
+
+@app.context_processor
+def inject_owner_security():
+    return {"owner_csrf_token": owner_csrf_token()}
+
+
 # ---------- public landing ----------
 
 @app.context_processor
@@ -251,6 +275,23 @@ def inject_globals():
 @app.route("/")
 def landing():
     return render_template("landing.html", bot_name=BOT_NAME)
+
+
+@app.route("/health")
+def health_check():
+    database_ok = False
+    try:
+        economy_init_db()
+        database_ok = os.path.exists(DB_PATH)
+    except Exception:
+        pass
+    status = get_service_status("swbot")
+    healthy = database_ok and status.get("active") is not False
+    return {
+        "status": "ok" if healthy else "degraded",
+        "database": "ok" if database_ok else "error",
+        "bot": "online" if status.get("active") else "offline",
+    }, 200 if healthy else 503
 
 
 # ---------- auth ----------
@@ -984,7 +1025,7 @@ def create_review_invite(guild_id: int) -> tuple[str | None, str | None]:
         response = requests.post(
             f"https://discord.com/api/v10/channels/{channel['id']}/invites",
             headers={**bot_api_headers(), "Content-Type": "application/json"},
-            json={"max_age": 0, "max_uses": 0, "unique": True, "reason": "Owner Panel review invite"},
+            json={"max_age": REVIEW_INVITE_MAX_AGE, "max_uses": 0, "unique": True, "reason": "Owner Panel review invite"},
             timeout=10,
         )
         if response.status_code == 200:
@@ -1060,6 +1101,22 @@ def owner_audit_page():
         active_tab="owner_audit",
         entries=reg.list_owner_audit(200),
     )
+
+
+@app.route("/owner/backup", methods=["POST"])
+@super_admin_required
+def owner_backup_database():
+    backup_dir = os.path.join(BASE_DIR, "backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    backup_name = f"economy-{datetime.now().strftime('%Y%m%d-%H%M%S')}.db"
+    backup_path = os.path.join(backup_dir, backup_name)
+    try:
+        shutil.copy2(DB_PATH, backup_path)
+        reg.record_owner_action(int(session["user_id"]), "database_backup", details=backup_name)
+        flash(f"Database backup created: {backup_name}", "success")
+    except Exception as e:
+        flash(f"Database backup failed: {e}", "error")
+    return redirect(url_for("owner_dashboard_page"))
 
 
 def send_discord_dm(user_id: int, content: str) -> bool:
@@ -1244,6 +1301,31 @@ def owner_start_review(registry_id):
     return redirect(url_for("owner_server_detail", registry_id=registry_id))
 
 
+@app.route("/owner/servers/<int:registry_id>/status", methods=["POST"])
+@super_admin_required
+def owner_change_status(registry_id):
+    status = request.form.get("status", "")
+    entry = reg.set_status(registry_id, status, int(session["user_id"]))
+    if entry:
+        reg.record_owner_action(int(session["user_id"]), f"status_{status}", entry, "Owner Panel status change")
+        flash(f"{entry.guild_name} status changed to {status.replace('_', ' ')}.", "success")
+    else:
+        flash("Server record not found.", "error")
+    return redirect(url_for("owner_server_detail", registry_id=registry_id))
+
+
+@app.route("/owner/servers/<int:registry_id>/note", methods=["POST"])
+@super_admin_required
+def owner_update_note(registry_id):
+    entry = reg.update_note(registry_id, request.form.get("note", "").strip() or None)
+    if entry:
+        reg.record_owner_action(int(session["user_id"]), "note_updated", entry, entry.note or "Note cleared")
+        flash("Review notes saved.", "success")
+    else:
+        flash("Server record not found.", "error")
+    return redirect(url_for("owner_server_detail", registry_id=registry_id))
+
+
 @app.route("/owner/servers/<int:registry_id>/regenerate-invite", methods=["POST"])
 @super_admin_required
 def owner_regenerate_invite(registry_id):
@@ -1256,7 +1338,7 @@ def owner_regenerate_invite(registry_id):
         reg.set_invite_error(registry_id, error or "Invite creation failed")
         flash(f"Could not create invite: {error}", "error")
         return redirect(url_for("owner_server_detail", registry_id=registry_id))
-    reg.set_invite(registry_id, invite_url)
+    reg.set_invite(registry_id, invite_url, REVIEW_INVITE_MAX_AGE)
     reg.record_owner_action(int(session["user_id"]), "invite_regenerated", entry, "Review invite regenerated")
     flash("Review invite regenerated.", "success")
     return redirect(url_for("owner_server_detail", registry_id=registry_id))

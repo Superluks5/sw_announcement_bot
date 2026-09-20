@@ -27,6 +27,9 @@ Groq's free AI API, formats it using your server template, and posts it.
      `BOT_INVITE_PERMISSIONS` to a different permissions integer if the public
      bot should use narrower permissions. The link identifies the bot directly
      from `DISCORD_TOKEN`, so it will not accidentally invite a DEV bot.
+    - `REVIEW_INVITE_MAX_AGE` controls Owner Panel review invites in seconds;
+       it defaults to 86400 (24 hours). Set it to `0` only when permanent review
+       invites are explicitly required.
 
 4. **Install and run:**
    ```
@@ -44,6 +47,11 @@ administrator to click the link and authorize the bot; the bot token cannot
 accept an invite silently. After the authorization completes, the bot stays
 in the approved server instead of leaving again. On startup, slash commands
 are synced separately to the primary server and every approved server.
+
+The Owner Panel periodically discovers servers containing the bot, records a
+review snapshot, and creates a temporary review invite when Discord permits
+it. The dashboard health check is available at `/health`; Owner Panel users
+can also create a database backup from the overview page.
 
 ## Hosting it 24/7
 

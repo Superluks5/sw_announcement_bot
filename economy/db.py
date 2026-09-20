@@ -69,6 +69,8 @@ def _ensure_guild_registry_columns():
             conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN invite_url VARCHAR(500)")
         if "invite_created_at" not in columns:
             conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN invite_created_at DATETIME")
+        if "invite_expires_at" not in columns:
+            conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN invite_expires_at DATETIME")
         additions = {
             "invite_error": "VARCHAR(300)",
             "bot_present": "BOOLEAN DEFAULT 0",
