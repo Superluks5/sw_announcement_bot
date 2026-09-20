@@ -1,10 +1,9 @@
 """
 Command permissions - edit permissions_config.json to control who can use
 each command. This .py file holds the shared logic (tracked in git and
-identical everywhere); the actual role IDs live in permissions_config.json,
-which is gitignored so it can be different per machine (e.g. your real
-server's role IDs on the VM vs a test server's role IDs on your local
-dev clone) without git ever overwriting one with the other.
+identical everywhere); the actual role IDs live in a per-server
+permissions_config.json under guild_data/<guild_id>/, so two different
+communities using the shared bot never see or affect each other's rules.
 
 Since Discord's own permission menu (Server Settings -> Integrations) can
 only restrict a whole command GROUP at once (e.g. all of /task together,
@@ -12,11 +11,11 @@ not /task add separately from /task show), this handles it in code
 instead - down to the individual subcommand level.
 
 HOW TO USE:
-Open (or create) permissions_config.json in the same folder as this file.
-The key is the command's "qualified name" - for a plain command it's just
-the name (e.g. "duel"), for a subcommand it's "group subcommand" separated
-by a space (e.g. "task add", "rank link"). The value is a list of Discord
-role IDs (as strings) allowed to use it.
+Open (or create) guild_data/<guild_id>/permissions_config.json. The key is
+the command's "qualified name" - for a plain command it's just the name
+(e.g. "duel"), for a subcommand it's "group subcommand" separated by a
+space (e.g. "task add", "rank link"). The value is a list of Discord role
+IDs (as strings) allowed to use it.
 
   - A command NOT listed is open to everyone (safe default - nothing
     breaks if you forget to add a new command).
@@ -35,21 +34,22 @@ EXAMPLE permissions_config.json:
   "task show": []
 }
 
-If permissions_config.json doesn't exist yet, it's auto-created empty
-(everyone can use everything) the first time the bot runs.
+If a guild's permissions_config.json doesn't exist yet, it's auto-created
+empty (everyone can use everything) the first time it's needed.
 
-command_toggles.json (same folder, also gitignored) controls fully
-enabling/disabling a command - {"command_name": false} disables it for
-EVERYONE including admins. Absent = enabled (default).
+command_toggles.json (same per-guild folder) controls fully enabling/
+disabling a command - {"command_name": false} disables it for EVERYONE
+including admins, for that server only. Absent = enabled (default).
 
-usage_data.json (same folder, gitignored) is a running count of how many
-times each command has been successfully used - read by the dashboard's
-analytics page. Purely informational, never affects permissions.
+usage_data.json (same per-guild folder) is a running count of how many
+times each command has been successfully used in that server - read by
+the dashboard's analytics page. Purely informational, never affects
+permissions.
 
-maintenance.json (same folder, gitignored) controls maintenance mode - when
-enabled, blocks EVERY command for EVERYONE except one exempt Discord user
-ID, overriding admin bypass entirely. Managed via the dashboard's
-Maintenance page.
+maintenance.json (same per-guild folder) controls maintenance mode for
+that one server - when enabled, blocks EVERY command for EVERYONE except
+one exempt Discord user ID, overriding admin bypass entirely. Managed via
+the dashboard's Maintenance page.
 """
 
 import os
@@ -57,21 +57,19 @@ import json
 import time
 import discord
 
+from guild_paths import guild_file
+
 ADMIN_BYPASS = True
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "permissions_config.json")
-TOGGLES_FILE = os.path.join(os.path.dirname(__file__), "command_toggles.json")
-USAGE_FILE = os.path.join(os.path.dirname(__file__), "usage_data.json")
-MAINTENANCE_FILE = os.path.join(os.path.dirname(__file__), "maintenance.json")
 
-
-def load_config() -> dict[str, list[int]]:
-    if not os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+def load_config(guild_id: int) -> dict[str, list[int]]:
+    path = guild_file(guild_id, "permissions_config.json")
+    if not os.path.exists(path):
+        with open(path, "w", encoding="utf-8") as f:
             json.dump({}, f, indent=2)
         return {}
 
-    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
 
     # JSON can't hold ints this large reliably in all tools, so IDs are
@@ -79,25 +77,27 @@ def load_config() -> dict[str, list[int]]:
     return {command: [int(role_id) for role_id in role_ids] for command, role_ids in raw.items()}
 
 
-def load_toggles() -> dict[str, bool]:
-    if not os.path.exists(TOGGLES_FILE):
-        with open(TOGGLES_FILE, "w", encoding="utf-8") as f:
+def load_toggles(guild_id: int) -> dict[str, bool]:
+    path = guild_file(guild_id, "command_toggles.json")
+    if not os.path.exists(path):
+        with open(path, "w", encoding="utf-8") as f:
             json.dump({}, f, indent=2)
         return {}
-    with open(TOGGLES_FILE, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def is_command_enabled(command_name: str) -> bool:
-    return load_toggles().get(command_name, True)
+def is_command_enabled(guild_id: int, command_name: str) -> bool:
+    return load_toggles(guild_id).get(command_name, True)
 
 
-def record_usage(command_name: str):
+def record_usage(guild_id: int, command_name: str):
     """Best-effort usage counter for the dashboard's analytics page."""
     try:
+        path = guild_file(guild_id, "usage_data.json")
         data = {}
-        if os.path.exists(USAGE_FILE):
-            with open(USAGE_FILE, "r", encoding="utf-8") as f:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         entry = data.get(command_name, {"count": 0, "last_used": None, "daily": {}})
         entry.setdefault("daily", {})
@@ -111,29 +111,31 @@ def record_usage(command_name: str):
             for k in oldest_keys:
                 del entry["daily"][k]
         data[command_name] = entry
-        with open(USAGE_FILE, "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
     except Exception as e:
         print(f"⚠️ Failed to record command usage: {e}")
 
 
-def load_maintenance() -> dict:
+def load_maintenance(guild_id: int) -> dict:
     default = {"enabled": False, "allowed_user_id": None}
-    if not os.path.exists(MAINTENANCE_FILE):
-        with open(MAINTENANCE_FILE, "w", encoding="utf-8") as f:
+    path = guild_file(guild_id, "maintenance.json")
+    if not os.path.exists(path):
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(default, f, indent=2)
         return default
-    with open(MAINTENANCE_FILE, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
     for key, value in default.items():
         data.setdefault(key, value)
     return data
 
 
-def is_maintenance_blocking(user_id: int) -> bool:
-    """True if maintenance mode is on AND this user is not the exempt one -
-    this applies even to server admins, unlike every other check here."""
-    m = load_maintenance()
+def is_maintenance_blocking(guild_id: int, user_id: int) -> bool:
+    """True if maintenance mode is on for this server AND this user is not
+    the exempt one - this applies even to server admins, unlike every
+    other check here."""
+    m = load_maintenance(guild_id)
     if not m.get("enabled"):
         return False
     allowed = m.get("allowed_user_id")
@@ -143,30 +145,33 @@ def is_maintenance_blocking(user_id: int) -> bool:
 def is_command_allowed(interaction: discord.Interaction) -> bool:
     if interaction.command is None:
         return True
+    if interaction.guild_id is None:
+        return True  # DMs - nothing to scope permissions to, let it through (existing commands all require a guild anyway)
 
+    guild_id = interaction.guild_id
     command_name = interaction.command.qualified_name
 
     # Maintenance mode overrides everything else, including admin bypass -
     # that's the whole point of it.
-    if isinstance(interaction.user, discord.Member) and is_maintenance_blocking(interaction.user.id):
+    if isinstance(interaction.user, discord.Member) and is_maintenance_blocking(guild_id, interaction.user.id):
         return False
 
     is_admin = ADMIN_BYPASS and isinstance(interaction.user, discord.Member) and interaction.user.guild_permissions.administrator
 
     # A fully disabled command blocks everyone, including admins - that's
     # the point of a hard disable (e.g. a broken command someone turned off).
-    if not is_command_enabled(command_name):
+    if not is_command_enabled(guild_id, command_name):
         return False
 
     if is_admin:
-        record_usage(command_name)
+        record_usage(guild_id, command_name)
         return True
 
-    command_permissions = load_config()
+    command_permissions = load_config(guild_id)
     allowed_role_ids = command_permissions.get(command_name)
 
     if allowed_role_ids is None:
-        record_usage(command_name)
+        record_usage(guild_id, command_name)
         return True  # not listed - open to everyone
 
     if not isinstance(interaction.user, discord.Member):
@@ -175,5 +180,5 @@ def is_command_allowed(interaction: discord.Interaction) -> bool:
     user_role_ids = {r.id for r in interaction.user.roles}
     allowed = bool(user_role_ids.intersection(allowed_role_ids))
     if allowed:
-        record_usage(command_name)
+        record_usage(guild_id, command_name)
     return allowed

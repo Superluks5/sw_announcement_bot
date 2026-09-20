@@ -104,11 +104,11 @@ class PermissionedTree(app_commands.CommandTree):
 
         command_name = interaction.command.qualified_name if interaction.command else None
 
-        if isinstance(interaction.user, discord.Member) and is_maintenance_blocking(interaction.user.id):
+        if interaction.guild_id and isinstance(interaction.user, discord.Member) and is_maintenance_blocking(interaction.guild_id, interaction.user.id):
             await interaction.response.send_message(
                 "🔧 The bot is currently under maintenance. Try again shortly.", ephemeral=True
             )
-        elif command_name and not is_command_enabled(command_name):
+        elif command_name and interaction.guild_id and not is_command_enabled(interaction.guild_id, command_name):
             await interaction.response.send_message(
                 "🚫 This command is currently disabled.", ephemeral=True
             )
@@ -184,10 +184,17 @@ async def on_ready():
     await send_log(f"✅ **{bot.user}** is now online.")
 
     try:
-        load_config()  # creates permissions_config.json now if it doesn't exist yet
-        load_toggles()  # creates command_toggles.json now if it doesn't exist yet
-        load_maintenance()  # creates maintenance.json now if it doesn't exist yet
-        print("✅ Bot configuration ready")
+        import sys
+        sys.path.insert(0, os.path.dirname(__file__))
+        from economy.services import registry_service as reg
+
+        guild_ids = {GUILD_ID}
+        guild_ids.update(entry.guild_id for entry in reg.list_all() if entry.status == "approved")
+        for gid in guild_ids:
+            load_config(gid)  # creates that guild's permissions_config.json if it doesn't exist yet
+            load_toggles(gid)
+            load_maintenance(gid)
+        print(f"✅ Bot configuration ready for {len(guild_ids)} guild(s)")
         await send_log("⚙️ Bot configuration loaded successfully.")
     except Exception as e:
         print(f"⚠️ Failed to load bot configuration: {e}")
