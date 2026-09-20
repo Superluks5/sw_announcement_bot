@@ -1,0 +1,10 @@
+[Unit]
+Description=Star Wars Bot monitoring check
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/ubuntu/sw_announcement_bot
+EnvironmentFile=-/home/ubuntu/sw_announcement_bot/.env
+ExecStart=/home/ubuntu/sw_announcement_bot/ops/monitor.sh

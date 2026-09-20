@@ -12,6 +12,7 @@ import time
 import secrets
 import shutil
 import subprocess
+import logging
 from datetime import datetime
 from functools import wraps
 from urllib.parse import urlencode
@@ -35,6 +36,8 @@ economy_init_db()  # safe to call every startup - additive, never drops tables
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 app = Flask(__name__)
+logging.basicConfig(level=os.environ.get("DASHBOARD_LOG_LEVEL", "INFO"))
+logger = logging.getLogger("swbot.dashboard")
 app.secret_key = os.environ.get("DASHBOARD_SECRET_KEY", "change-me-in-env")
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -409,11 +412,13 @@ def callback():
     code = request.args.get("code")
     state = request.args.get("state")
     if not code or not state or not secrets.compare_digest(state, session.pop("oauth_state", "")):
+        logger.warning("OAuth callback rejected: missing or invalid state")
         flash("Login was cancelled or failed.", "error")
         return redirect(url_for("login"))
 
     matches_main_bot, identity_error = oauth_matches_main_bot()
     if not matches_main_bot:
+        logger.error("OAuth callback rejected: main bot identity mismatch: %s", identity_error)
         return (
             "Dashboard OAuth is not configured for the running main bot. "
             f"{identity_error} Update the VM's DISCORD_CLIENT_ID and "
@@ -434,6 +439,7 @@ def callback():
         timeout=10,
     )
     if token_resp.status_code != 200:
+        logger.warning("OAuth token exchange failed with HTTP %s", token_resp.status_code)
         flash("Discord login failed. Try again.", "error")
         return redirect(url_for("login"))
 
@@ -443,6 +449,10 @@ def callback():
         headers={"Authorization": f"Bearer {access_token}"},
         timeout=10,
     )
+    if user_resp.status_code != 200:
+        logger.warning("OAuth user lookup failed with HTTP %s", user_resp.status_code)
+        flash("Discord user lookup failed. Try again.", "error")
+        return redirect(url_for("login"))
     user = user_resp.json()
     user_id = user["id"]
 

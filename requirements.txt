@@ -6,3 +6,4 @@ tzdata
 flask
 requests
 SQLAlchemy>=2.0
+gunicorn>=23.0; platform_system != "Windows"

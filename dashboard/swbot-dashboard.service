@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/sw_announcement_bot/dashboard
-ExecStart=/home/ubuntu/sw_announcement_bot/venv/bin/python3 app.py
+WorkingDirectory=/home/ubuntu/sw_announcement_bot
+ExecStart=/home/ubuntu/sw_announcement_bot/venv/bin/gunicorn --workers 2 --threads 2 --timeout 60 --bind 127.0.0.1:5000 dashboard.app:app
 Restart=always
 RestartSec=5
 

@@ -61,6 +61,25 @@ the Flask dashboard behind Nginx or another production reverse proxy. Bot
 Control is restricted to Owner Panel users; normal server administrators
 cannot restart the bot or dashboard services.
 
+## Oracle VM operations
+
+The `ops/` directory contains deployment support. Install `ops/swbot-monitor.service`
+and `ops/swbot-monitor.timer` under `/etc/systemd/system/`, then run:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now swbot-monitor.timer
+```
+
+Run `sudo ./ops/backup.sh` for a dated backup outside the project. Deploy with
+`sudo ./ops/update.sh`; it backs up the live data, pulls `origin/main`, runs
+tests, restarts services, and rolls back the Git revision if `/health` fails.
+
+For production dashboard serving, install Gunicorn from `requirements.txt`,
+use the updated `dashboard/swbot-dashboard.service`, and configure
+`ops/swbot-nginx.conf` with your hostname and Let’s Encrypt certificate paths.
+Keep `.env`, backups, databases, logs, and `guild_data/` outside Git.
+
 ## Hosting it 24/7
 
 Running `python bot.py` on your own PC only works while your PC is on.

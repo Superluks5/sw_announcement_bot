@@ -26,3 +26,12 @@ maintenance.json
 economy/economy.db
 economy/economy.db-wal
 economy/economy.db-shm
+
+# Runtime and deployment data
+guild_data/
+bot_logs.json
+backups/
+*.log
+*.pid
+dashboard/__pycache__/
+ops/*.local
