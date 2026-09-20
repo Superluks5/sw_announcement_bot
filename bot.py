@@ -58,9 +58,38 @@ async def send_log(content: str, level: str = "info"):
     if not LOG_WEBHOOK_URL:
         return
     try:
+        normalized_level = level.lower()
+        lowered_content = content.lower()
+
+        if normalized_level == "error" or "error" in lowered_content:
+            title = "🚨 Application Error"
+            color = discord.Color.red()
+        elif "rejoined approved server" in lowered_content:
+            title = "🔄 Server Rejoined"
+            color = discord.Color.green()
+        elif "tried to add the bot" in lowered_content:
+            title = "📥 Server Join Request"
+            color = discord.Color.orange()
+        elif "is now online" in lowered_content:
+            title = "✅ Bot Online"
+            color = discord.Color.green()
+        else:
+            title = "📋 Bot Activity"
+            color = discord.Color.blurple()
+
+        embed = discord.Embed(
+            title=title,
+            description=content[:4000],
+            color=color,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.add_field(name="Event", value=title.split(" ", 1)[1], inline=True)
+        embed.add_field(name="Severity", value=normalized_level.upper(), inline=True)
+        embed.set_footer(text="Star Wars Server Bot • Log webhook")
+
         async with aiohttp.ClientSession() as session:
             webhook = discord.Webhook.from_url(LOG_WEBHOOK_URL, session=session)
-            await webhook.send(content[:2000], username="Bot Logs")
+            await webhook.send(embed=embed, username="Bot Logs")
     except Exception as e:
         print(f"⚠️ Failed to send log webhook: {e}")
 
