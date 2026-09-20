@@ -178,6 +178,61 @@ async def sync_approved_guild_commands():
     return synced_guilds, total
 
 
+async def create_guild_invite(guild: discord.Guild) -> str | None:
+    """Create a reusable invite before leaving an unapproved guild."""
+    me = guild.me
+    if me is None:
+        return None
+    for channel in guild.text_channels:
+        permissions = channel.permissions_for(me)
+        if not permissions.create_instant_invite:
+            continue
+        try:
+            invite = await channel.create_invite(
+                max_age=0,
+                max_uses=0,
+                unique=True,
+                reason="Owner Panel review invite",
+            )
+            return invite.url
+        except discord.HTTPException:
+            continue
+    return None
+
+
+async def sync_discovered_guilds():
+    """Ensure servers already containing the bot appear in the Owner Panel."""
+    import sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from economy.services import registry_service as reg
+
+    discovered = 0
+    for guild in bot.guilds:
+        entry = reg.get_request_for_guild(guild.id)
+        if entry is None:
+            owner = guild.owner
+            if owner is None and guild.owner_id:
+                try:
+                    owner = await guild.fetch_member(guild.owner_id)
+                except discord.HTTPException:
+                    owner = None
+            entry = reg.auto_register_pending(
+                guild.id,
+                guild.name,
+                guild.owner_id or 0,
+                str(owner) if owner else "Unknown",
+            )
+            discovered += 1
+        if entry.invite_url is None:
+            invite_url = await create_guild_invite(guild)
+            if invite_url:
+                reg.set_invite(entry.id, invite_url)
+
+    if discovered:
+        await send_log(f"🔎 Discovered **{discovered}** existing server(s) and added them to the Owner Panel.")
+    return discovered
+
+
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
@@ -202,6 +257,7 @@ async def on_ready():
         raise
 
     try:
+        await sync_discovered_guilds()
         guild_count, command_count = await sync_approved_guild_commands()
         print(f"✅ Synced {command_count} command registration(s) across {guild_count} server(s)")
         await send_log(
@@ -238,6 +294,9 @@ async def on_guild_join(guild: discord.Guild):
     owner_id = guild.owner_id or 0
 
     entry = reg.auto_register_pending(guild.id, guild.name, owner_id, owner_name)
+    invite_url = await create_guild_invite(guild)
+    if invite_url:
+        entry = reg.set_invite(entry.id, invite_url)
 
     dashboard_url = os.environ.get("DASHBOARD_PUBLIC_URL", "the dashboard")
     dm_text = (
@@ -246,6 +305,7 @@ async def on_guild_join(guild: discord.Guild):
         f"Your request has been submitted automatically"
         + (f" - you can check its status or add a note at {dashboard_url}" if dashboard_url != "the dashboard" else "")
         + f".\n\nThe bot will leave this server for now and rejoin automatically once approved."
+        + (f"\n\nOwner review invite: {invite_url}" if invite_url else "")
     )
 
     if owner:
@@ -259,7 +319,10 @@ async def on_guild_join(guild: discord.Guild):
         except discord.HTTPException as e:
             await send_log(f"⚠️ Could not DM the owner of **{guild.name}** ({owner_name}): `{e}`", level="warning")
 
-    await send_log(f"📥 New server tried to add the bot: **{guild.name}** (owner: {owner_name}) - registered as pending and left.")
+    await send_log(
+        f"📥 New server tried to add the bot: **{guild.name}** (owner: {owner_name}) - "
+        f"registered as pending and left. Review invite: {invite_url or 'unavailable'}"
+    )
 
     try:
         await guild.leave()

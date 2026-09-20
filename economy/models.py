@@ -228,6 +228,8 @@ class GuildRegistry(Base):
     requested_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    invite_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    invite_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class OwnerAuditLog(Base):

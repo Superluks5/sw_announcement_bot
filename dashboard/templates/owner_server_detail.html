@@ -18,6 +18,7 @@
     <div class="detail"><label>Requested</label><strong>{{ server.requested_at.strftime('%b %d, %Y %H:%M') }}</strong></div>
     <div class="detail"><label>Decision</label><strong>{{ server.decided_at.strftime('%b %d, %Y %H:%M') if server.decided_at else 'Not decided' }}</strong></div>
     <div class="detail"><label>Note</label><strong>{{ server.note or 'No note' }}</strong></div>
+    <div class="detail"><label>Review invite</label>{% if server.invite_url %}<a href="{{ server.invite_url }}" target="_blank" rel="noopener">Join this server</a><br><span class="hint">Created {{ server.invite_created_at.strftime('%b %d, %Y %H:%M') if server.invite_created_at else 'unknown time' }}</span>{% else %}<strong>No invite available</strong><br><span class="hint">The bot may not have Create Invite permission in this server.</span>{% endif %}</div>
 </div>
 <div class="actions">
     {% if server.status == 'pending' %}

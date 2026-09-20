@@ -113,6 +113,18 @@ def auto_register_pending(guild_id: int, guild_name: str, owner_discord_id: int,
         return entry
 
 
+def set_invite(registry_id: int, invite_url: str):
+    from datetime import datetime, timezone
+    with SessionLocal() as session:
+        entry = session.get(GuildRegistry, registry_id)
+        if entry:
+            entry.invite_url = invite_url
+            entry.invite_created_at = datetime.now(timezone.utc)
+            session.commit()
+            session.refresh(entry)
+        return entry
+
+
 def set_bot_enabled(registry_id: int, enabled: bool):
     with SessionLocal() as session:
         entry = session.get(GuildRegistry, registry_id)

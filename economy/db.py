@@ -65,6 +65,10 @@ def _ensure_guild_registry_columns():
             conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN decided_at DATETIME")
         if "decided_by" not in columns:
             conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN decided_by BIGINT")
+        if "invite_url" not in columns:
+            conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN invite_url VARCHAR(500)")
+        if "invite_created_at" not in columns:
+            conn.exec_driver_sql("ALTER TABLE guild_registry ADD COLUMN invite_created_at DATETIME")
 
 
 def init_db():
