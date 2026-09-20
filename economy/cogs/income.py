@@ -154,6 +154,10 @@ class Income(commands.Cog):
     async def before_role_income(self):
         await self.bot.wait_until_ready()
 
+    @grant_role_income.error
+    async def role_income_error(self, error: Exception):
+        await self.bot.send_log(f"❌ Role income background task failed: `{error}`", level="error")
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Income(bot))

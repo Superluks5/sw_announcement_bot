@@ -132,6 +132,17 @@ class PermissionedTree(app_commands.CommandTree):
 intents = discord.Intents.default()
 intents.members = True  # required so {@name} placeholders can find users, not just roles
 bot = commands.Bot(command_prefix="!", intents=intents, tree_cls=PermissionedTree)
+bot.send_log = send_log
+
+
+@bot.event
+async def on_disconnect():
+    await send_log("🔌 Discord connection lost. The bot is attempting to reconnect.", level="warning")
+
+
+@bot.event
+async def on_resumed():
+    await send_log("🔁 Discord connection resumed successfully.")
 
 
 async def sync_approved_guild_commands():
@@ -172,16 +183,26 @@ async def on_ready():
     print(f"✅ Logged in as {bot.user}")
     await send_log(f"✅ **{bot.user}** is now online.")
 
-    load_config()  # creates permissions_config.json now if it doesn't exist yet
-    load_toggles()  # creates command_toggles.json now if it doesn't exist yet
-    load_maintenance()  # creates maintenance.json now if it doesn't exist yet
-    print("✅ permissions_config.json ready")
+    try:
+        load_config()  # creates permissions_config.json now if it doesn't exist yet
+        load_toggles()  # creates command_toggles.json now if it doesn't exist yet
+        load_maintenance()  # creates maintenance.json now if it doesn't exist yet
+        print("✅ Bot configuration ready")
+        await send_log("⚙️ Bot configuration loaded successfully.")
+    except Exception as e:
+        print(f"⚠️ Failed to load bot configuration: {e}")
+        await send_log(f"❌ Failed to load bot configuration: `{e}`", level="error")
+        raise
 
     try:
         guild_count, command_count = await sync_approved_guild_commands()
         print(f"✅ Synced {command_count} command registration(s) across {guild_count} server(s)")
+        await send_log(
+            f"🔄 Command sync completed: **{command_count}** command(s) across **{guild_count}** approved server(s)."
+        )
     except Exception as e:
         print(f"⚠️ Failed to sync commands: {e}")
+        await send_log(f"⚠️ Failed to sync commands: `{e}`", level="error")
 
 
 @bot.event
@@ -224,23 +245,41 @@ async def on_guild_join(guild: discord.Guild):
         try:
             await owner.send(dm_text)
         except discord.Forbidden:
-            pass  # owner has DMs disabled - the pending request still exists for them to find via the dashboard
+            await send_log(
+                f"⚠️ Could not DM the owner of **{guild.name}** ({owner_name}); direct messages are disabled.",
+                level="warning",
+            )
+        except discord.HTTPException as e:
+            await send_log(f"⚠️ Could not DM the owner of **{guild.name}** ({owner_name}): `{e}`", level="warning")
 
     await send_log(f"📥 New server tried to add the bot: **{guild.name}** (owner: {owner_name}) - registered as pending and left.")
 
-    await guild.leave()
+    try:
+        await guild.leave()
+    except discord.HTTPException as e:
+        await send_log(f"❌ Failed to leave unapproved server **{guild.name}**: `{e}`", level="error")
+        raise
+
+
+@bot.event
+async def on_guild_remove(guild: discord.Guild):
+    await send_log(f"👋 Bot was removed from **{guild.name}** (ID: `{guild.id}`).", level="warning")
 
 
 async def load_cogs():
+    loaded_count = 0
+
     cogs_dir = os.path.join(os.path.dirname(__file__), "cogs")
     for filename in os.listdir(cogs_dir):
         if filename.endswith(".py") and not filename.startswith("_"):
             cog_name = f"cogs.{filename[:-3]}"
             try:
                 await bot.load_extension(cog_name)
+                loaded_count += 1
                 print(f"✅ Loaded cog: {cog_name}")
             except Exception as e:
                 print(f"⚠️ Failed to load {cog_name}: {e}")
+                await send_log(f"❌ Failed to load cog `{cog_name}`: `{e}`", level="error")
 
     economy_cogs_dir = os.path.join(os.path.dirname(__file__), "economy", "cogs")
     if os.path.isdir(economy_cogs_dir):
@@ -249,16 +288,26 @@ async def load_cogs():
                 cog_name = f"economy.cogs.{filename[:-3]}"
                 try:
                     await bot.load_extension(cog_name)
+                    loaded_count += 1
                     print(f"✅ Loaded cog: {cog_name}")
                 except Exception as e:
                     print(f"⚠️ Failed to load {cog_name}: {e}")
+                    await send_log(f"❌ Failed to load cog `{cog_name}`: `{e}`", level="error")
+
+    await send_log(f"🧩 Loaded **{loaded_count}** cog(s) successfully.")
+    return loaded_count
 
 
 async def main():
     async with bot:
         from economy.db import init_db
-        init_db()
+        try:
+            init_db()
+        except Exception as e:
+            await send_log(f"❌ Economy database initialization failed: `{e}`", level="error")
+            raise
         print("✅ Economy database ready")
+        await send_log("🗄️ Economy database initialized successfully.")
 
         await load_cogs()
         await bot.start(DISCORD_TOKEN)
@@ -267,5 +316,6 @@ async def main():
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
         print("❌ DISCORD_TOKEN not found. Check your .env file.")
+        asyncio.run(send_log("❌ DISCORD_TOKEN is missing. Bot startup aborted.", level="error"))
     else:
         asyncio.run(main())
