@@ -116,6 +116,28 @@ _roles_cache = {"data": None, "fetched_at": 0}
 _members_cache = {"data": None, "fetched_at": 0}
 _channels_cache = {"data": None, "fetched_at": 0}
 _bot_identity_cache = {"id": None, "checked_at": 0}
+_login_attempts: dict[str, list[float]] = {}
+LOGIN_WINDOW_SECONDS = 300
+MAX_LOGIN_ATTEMPTS = 10
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if request.is_secure:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
+
+def login_rate_limited(client_key: str) -> bool:
+    now = time.time()
+    attempts = [timestamp for timestamp in _login_attempts.get(client_key, []) if now - timestamp < LOGIN_WINDOW_SECONDS]
+    attempts.append(now)
+    _login_attempts[client_key] = attempts
+    return len(attempts) > MAX_LOGIN_ATTEMPTS
 
 
 def get_main_bot_id() -> str | None:
@@ -358,6 +380,8 @@ def health_check():
 
 @app.route("/login")
 def login():
+    if login_rate_limited(request.remote_addr or "unknown"):
+        return "Too many login attempts. Please try again later.", 429
     if not DISCORD_CLIENT_ID:
         return "DISCORD_CLIENT_ID isn't set in .env yet - see setup notes.", 500
     matches_main_bot, identity_error = oauth_matches_main_bot()
@@ -1689,21 +1713,21 @@ def get_service_status(service: str) -> dict:
 
 
 @app.route("/control")
-@login_required
+@super_admin_required
 def control_page():
     bot_status = get_service_status("swbot")
     dashboard_status = get_service_status("swbot-dashboard")
     return render_template(
         "control.html",
         username=session.get("username"),
-        active_tab="control",
+        active_tab="owner_control",
         bot_status=bot_status,
         dashboard_status=dashboard_status,
     )
 
 
 @app.route("/control/restart/<service>", methods=["POST"])
-@login_required
+@super_admin_required
 def restart_service(service):
     allowed_services = {"swbot", "swbot-dashboard"}
     if service not in allowed_services:

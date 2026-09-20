@@ -79,6 +79,7 @@
             <div class="sidebar-brand"><span class="dot">◆</span> Owner Panel</div>
             <a href="{{ url_for('owner_dashboard_page') }}" class="nav-item {{ 'active' if active_tab == 'owner_dashboard' }}"><span>📡</span> Overview</a>
             <a href="{{ url_for('owner_servers_page') }}" class="nav-item {{ 'active' if active_tab == 'owner_servers' }}"><span>🌐</span> Servers</a>
+            <a href="{{ url_for('control_page') }}" class="nav-item {{ 'active' if active_tab == 'owner_control' }}"><span>🖥️</span> Bot Control</a>
             <a href="{{ url_for('owner_logs_page') }}" class="nav-item {{ 'active' if active_tab == 'owner_logs' }}"><span>📜</span> Bot Logs</a>
             <a href="{{ url_for('owner_audit_page') }}" class="nav-item {{ 'active' if active_tab == 'owner_audit' }}"><span>🧾</span> Audit History</a>
             <a href="{{ url_for('dashboard_home') }}" class="back-link">← Back to Server Panel</a>

@@ -56,6 +56,11 @@ review snapshot, and creates a temporary review invite when Discord permits
 it. The dashboard health check is available at `/health`; Owner Panel users
 can also create a database backup from the overview page.
 
+For production HTTPS deployments, set `DASHBOARD_COOKIE_SECURE=1` and serve
+the Flask dashboard behind Nginx or another production reverse proxy. Bot
+Control is restricted to Owner Panel users; normal server administrators
+cannot restart the bot or dashboard services.
+
 ## Hosting it 24/7
 
 Running `python bot.py` on your own PC only works while your PC is on.

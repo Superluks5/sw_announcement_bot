@@ -22,6 +22,22 @@ class OwnerPanelTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Owner Panel", response.data)
 
+    def test_bot_control_is_owner_only(self):
+        response = self.client.get("/control")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Bot Control", response.data)
+
+    def test_bot_control_rejects_server_only_user(self):
+        with self.client.session_transaction() as session:
+            session["user_id"] = "456"
+        response = self.client.get("/control")
+        self.assertEqual(response.status_code, 302)
+
+    def test_security_headers_are_present(self):
+        response = self.client.get("/health")
+        self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+
     def test_owner_post_requires_csrf_token(self):
         response = self.client.post("/owner/servers/refresh")
         self.assertEqual(response.status_code, 400)
