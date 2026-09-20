@@ -71,9 +71,16 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now swbot-monitor.timer
 ```
 
-Run `sudo ./ops/backup.sh` for a dated backup outside the project. Deploy with
-`sudo ./ops/update.sh`; it backs up the live data, pulls `origin/main`, runs
-tests, restarts services, and rolls back the Git revision if `/health` fails.
+Run `./ops/backup.sh` for a dated backup outside the project. The backup uses
+SQLite's online backup API and a lock, so concurrent backups cannot corrupt
+the archive. Deploy with `./ops/update.sh`; it requires a clean Git worktree,
+creates and verifies a backup, pulls `origin/main`, runs tests, restarts
+services, and rolls back the Git revision if `/health` fails.
+
+Use `./ops/restore-test.sh /var/backups/swbot/swbot-<timestamp>.tar.gz` to
+validate a backup's SQLite integrity and runtime JSON before restoring it.
+See [RECOVERY.md](RECOVERY.md) for restoration, emergency shutdown, monitoring
+simulation, and Gunicorn/Nginx procedures.
 
 For production dashboard serving, install Gunicorn from `requirements.txt`,
 use the updated `dashboard/swbot-dashboard.service`, and configure
