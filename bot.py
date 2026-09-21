@@ -33,6 +33,17 @@ GUILD_ID = int(os.environ.get("GUILD_ID", 1535372103593894028))
 LOG_WEBHOOK_URL = os.environ.get("LOG_WEBHOOK_URL")
 REVIEW_INVITE_MAX_AGE = int(os.environ.get("REVIEW_INVITE_MAX_AGE", "86400"))
 
+# Edit this list to change the bot's rotating Discord presence. Each entry is
+# (activity type, text), and the loop below advances every five minutes.
+PRESENCE_ROTATION_MINUTES = 5
+PRESENCE_ACTIVITIES = (
+    (discord.ActivityType.watching, "the galaxy • Luksera"),
+    (discord.ActivityType.playing, "with Luksera"),
+    (discord.ActivityType.watching, "over the Republic"),
+    (discord.ActivityType.playing, "Star Wars • Luksera"),
+    (discord.ActivityType.watching, "Discord communities • Luksera"),
+)
+
 LOCAL_LOG_FILE = os.path.join(os.path.dirname(__file__), "bot_logs.json")
 MAX_LOCAL_LOGS = 300
 
@@ -135,6 +146,29 @@ intents = discord.Intents.default()
 intents.members = True  # required so {@name} placeholders can find users, not just roles
 bot = commands.Bot(command_prefix="!", intents=intents, tree_cls=PermissionedTree)
 bot.send_log = send_log
+
+
+def make_presence_activity(activity_type: discord.ActivityType, text: str) -> discord.BaseActivity:
+    if activity_type == discord.ActivityType.watching:
+        return discord.Activity(type=activity_type, name=text)
+    return discord.Game(name=text)
+
+
+presence_index = 0
+
+
+@tasks.loop(minutes=PRESENCE_ROTATION_MINUTES)
+async def rotate_presence():
+    global presence_index
+    presence_index = (presence_index + 1) % len(PRESENCE_ACTIVITIES)
+    activity_type, text = PRESENCE_ACTIVITIES[presence_index]
+    await bot.change_presence(activity=make_presence_activity(activity_type, text))
+
+
+@rotate_presence.error
+async def rotate_presence_error(error: Exception):
+    print(f"⚠️ Presence rotation failed: {error}")
+    await send_log(f"⚠️ Presence rotation failed: `{error}`", level="warning")
 
 
 @tasks.loop(minutes=10)
@@ -311,6 +345,13 @@ async def sync_discovered_guilds():
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
     await send_log(f"✅ **{bot.user}** is now online.")
+
+    global presence_index
+    presence_index = 0
+    activity_type, text = PRESENCE_ACTIVITIES[presence_index]
+    await bot.change_presence(activity=make_presence_activity(activity_type, text))
+    if not rotate_presence.is_running():
+        rotate_presence.start()
 
     try:
         import sys
