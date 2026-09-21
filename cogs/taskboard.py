@@ -5,6 +5,9 @@ A shared taskboard where each dev gets their own section (To Do / In
 Progress / Done). Posts as a "live" message that auto-updates - same
 pattern as /roadmap, /team, /blocker, /testflight.
 
+Per-server: each server using the shared bot gets its own taskboard data,
+stored under guild_data/<guild_id>/taskboard_data.json.
+
 Subcommands:
   /taskboard add      - add a task assigned to a dev
   /taskboard update   - change a task's status
@@ -20,7 +23,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "taskboard_data.json")
+from guild_paths import guild_file
 
 STATUS_CHOICES = [
     app_commands.Choice(name="⬜ To Do", value="todo"),
@@ -31,10 +34,11 @@ STATUS_LABELS = {"todo": "⬜ To Do", "in_progress": "🟦 In Progress", "done":
 STATUS_ORDER = {"in_progress": 0, "todo": 1, "done": 2}
 
 
-def load_data() -> dict:
-    if not os.path.exists(DATA_FILE):
+def load_data(guild_id: int) -> dict:
+    path = guild_file(guild_id, "taskboard_data.json")
+    if not os.path.exists(path):
         return {"tasks": [], "channel_id": None, "message_id": None}
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
     data.setdefault("tasks", [])
     data.setdefault("channel_id", None)
@@ -42,8 +46,9 @@ def load_data() -> dict:
     return data
 
 
-def save_data(data: dict):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+def save_data(guild_id: int, data: dict):
+    path = guild_file(guild_id, "taskboard_data.json")
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
@@ -83,26 +88,33 @@ def find_task(data: dict, assignee_id: int, number: int):
 class Taskboard(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._last_mtime = None
+        self._last_mtimes: dict[int, float] = {}
         self.watch_for_changes.start()
 
     def cog_unload(self):
         self.watch_for_changes.cancel()
 
+    def _known_guild_ids(self) -> set[int]:
+        return {g.id for g in self.bot.guilds}
+
     @tasks.loop(seconds=5)
     async def watch_for_changes(self):
         """Keeps the live taskboard in sync with edits from anywhere - Discord
-        commands or the web dashboard writing taskboard_data.json directly."""
-        if not os.path.exists(DATA_FILE):
-            return
-        mtime = os.path.getmtime(DATA_FILE)
-        if self._last_mtime is None:
-            self._last_mtime = mtime
-            return
-        if mtime != self._last_mtime:
-            self._last_mtime = mtime
-            data = load_data()
-            await self.refresh_live_message(data)
+        commands or the web dashboard writing a guild's taskboard_data.json
+        directly. Checks every server the bot is currently in."""
+        for guild_id in self._known_guild_ids():
+            path = guild_file(guild_id, "taskboard_data.json")
+            if not os.path.exists(path):
+                continue
+            mtime = os.path.getmtime(path)
+            last = self._last_mtimes.get(guild_id)
+            if last is None:
+                self._last_mtimes[guild_id] = mtime
+                continue
+            if mtime != last:
+                self._last_mtimes[guild_id] = mtime
+                data = load_data(guild_id)
+                await self.refresh_live_message(data)
 
     @watch_for_changes.before_loop
     async def before_watch(self):
@@ -134,9 +146,9 @@ class Taskboard(commands.Cog):
     @taskboard_group.command(name="add", description="Add a task assigned to a dev")
     @app_commands.describe(assignee="Who's responsible for this task", task="What needs to be done")
     async def add(self, interaction: discord.Interaction, assignee: discord.Member, task: str):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         data["tasks"].append({"assignee_id": assignee.id, "text": task, "status": "todo"})
-        save_data(data)
+        save_data(interaction.guild_id, data)
         updated_live = await self.refresh_live_message(data)
         note = "" if updated_live else "\n*(No live taskboard message set yet - use `/taskboard show` in a channel first.)*"
         await interaction.response.send_message(
@@ -157,7 +169,7 @@ class Taskboard(commands.Cog):
         number: int,
         status: app_commands.Choice[str],
     ):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         task = find_task(data, assignee.id, number)
 
         if not task:
@@ -168,7 +180,7 @@ class Taskboard(commands.Cog):
             return
 
         task["status"] = status.value
-        save_data(data)
+        save_data(interaction.guild_id, data)
         updated_live = await self.refresh_live_message(data)
         note = "" if updated_live else "\n*(No live taskboard message set yet - use `/taskboard show` in a channel first.)*"
         await interaction.response.send_message(
@@ -179,7 +191,7 @@ class Taskboard(commands.Cog):
     @taskboard_group.command(name="remove", description="Remove a task")
     @app_commands.describe(assignee="Whose task list this is", number="Task number for that person (see /taskboard show)")
     async def remove(self, interaction: discord.Interaction, assignee: discord.Member, number: int):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         task = find_task(data, assignee.id, number)
 
         if not task:
@@ -190,14 +202,14 @@ class Taskboard(commands.Cog):
             return
 
         data["tasks"].remove(task)
-        save_data(data)
+        save_data(interaction.guild_id, data)
         updated_live = await self.refresh_live_message(data)
         note = "" if updated_live else "\n*(No live taskboard message set yet - use `/taskboard show` in a channel first.)*"
         await interaction.response.send_message(f"🗑️ Removed: {task['text']}{note}", ephemeral=True)
 
     @taskboard_group.command(name="mytasks", description="See just your own tasks")
     async def mytasks(self, interaction: discord.Interaction):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         my_tasks = [t for t in data["tasks"] if t["assignee_id"] == interaction.user.id]
 
         if not my_tasks:
@@ -213,7 +225,7 @@ class Taskboard(commands.Cog):
     @taskboard_group.command(name="clear", description="Clear all tasks (optionally just for one dev)")
     @app_commands.describe(assignee="Optional - only clear this person's tasks. Leave blank to clear the whole board.")
     async def clear(self, interaction: discord.Interaction, assignee: discord.Member = None):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         if assignee:
             data["tasks"] = [t for t in data["tasks"] if t["assignee_id"] != assignee.id]
             label = assignee.display_name
@@ -221,21 +233,21 @@ class Taskboard(commands.Cog):
             data["tasks"] = []
             label = "the whole board"
 
-        save_data(data)
+        save_data(interaction.guild_id, data)
         updated_live = await self.refresh_live_message(data)
         note = "" if updated_live else "\n*(No live taskboard message set yet - use `/taskboard show` in a channel first.)*"
         await interaction.response.send_message(f"🧹 Cleared tasks for {label}.{note}", ephemeral=True)
 
     @taskboard_group.command(name="show", description="Post (or move) the live taskboard to this channel")
     async def show(self, interaction: discord.Interaction):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         embed = build_taskboard_embed(data)
         await interaction.response.send_message(embed=embed)
         sent_message = await interaction.original_response()
 
         data["channel_id"] = interaction.channel_id
         data["message_id"] = sent_message.id
-        save_data(data)
+        save_data(interaction.guild_id, data)
 
 
 async def setup(bot: commands.Bot):
