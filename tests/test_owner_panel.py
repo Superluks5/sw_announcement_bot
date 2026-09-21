@@ -96,6 +96,30 @@ class OwnerPanelTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             self.assertNotEqual(session.get("guild_id"), 789)
 
+    def test_allowlisted_owner_can_request_access_for_subserver(self):
+        with self.client.session_transaction() as session:
+            session["administered_guilds"] = [{"id": "789", "name": "Subserver"}]
+
+        response = self.client.get("/request-access")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Submit Request", response.data)
+
+        with self.client.session_transaction() as session:
+            csrf_token = session["csrf_token"]
+        with patch.object(dashboard_app.reg, "request_access") as request_access:
+            response = self.client.post(
+                "/request-access",
+                data={"csrf_token": csrf_token, "guild_id": "789", "note": "Subserver"},
+            )
+        self.assertEqual(response.status_code, 302)
+        request_access.assert_called_once_with(
+            guild_id=789,
+            guild_name="Subserver",
+            owner_discord_id=123,
+            owner_discord_name="owner",
+            note="Subserver",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

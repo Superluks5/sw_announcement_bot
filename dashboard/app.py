@@ -481,9 +481,6 @@ def callback():
     session["user_id"] = user_id
     session["username"] = user.get("username", "Unknown")
 
-    if ALLOWED_USER_IDS and user_id in ALLOWED_USER_IDS:
-        return redirect(url_for("dashboard_home"))
-
     # Not an existing owner - fetch the servers they administer (owner or
     # has the Administrator permission) for the request-access picker.
     ADMINISTRATOR_BIT = 0x8
@@ -507,6 +504,8 @@ def callback():
             admin_guilds.append({"id": g["id"], "name": g["name"]})
 
     session["administered_guilds"] = admin_guilds
+    if ALLOWED_USER_IDS and user_id in ALLOWED_USER_IDS:
+        return redirect(url_for("dashboard_home"))
     return redirect(url_for("request_access_page"))
 
 
@@ -1010,10 +1009,6 @@ def economy_role_income_remove(rule_id):
 @app.route("/request-access", methods=["GET", "POST"])
 @any_login_required
 def request_access_page():
-    # Existing allowlisted owners don't need this flow
-    if ALLOWED_USER_IDS and session["user_id"] in ALLOWED_USER_IDS:
-        return redirect(url_for("dashboard_home"))
-
     if request.method == "POST":
         guild_id = int(request.form["guild_id"])
         admin_guilds = session.get("administered_guilds", [])

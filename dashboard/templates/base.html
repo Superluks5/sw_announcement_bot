@@ -294,6 +294,8 @@
                         </div>
                         <div class="dropdown-row">👤 {{ username }}</div>
                         <div class="dropdown-divider"></div>
+                        <a class="dropdown-link" href="{{ url_for('request_access_page') }}">➕ Request server access</a>
+                        <div class="dropdown-divider"></div>
                         {% if is_super_admin %}
                         <a class="dropdown-link" href="{{ url_for('owner_servers_page') }}" style="color: #fbbf24;">🛡️ Owner Panel</a>
                         <div class="dropdown-divider"></div>
