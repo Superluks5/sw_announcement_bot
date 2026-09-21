@@ -35,8 +35,8 @@
 </head>
 <body>
     <div class="card">
-        <h1>◆ Request Server Access</h1>
-        <p class="sub">Pick a server you administer to request access to the shared bot's dashboard.</p>
+        <h1>◆ Server Discovery</h1>
+        <p class="sub">Choose a server you own or administer to add the bot or open its console.</p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}
@@ -44,25 +44,30 @@
             {% endfor %}
         {% endwith %}
 
-        {% if my_requests %}
-        <p style="font-size: 12px; color: #8b93a1; margin-bottom: 8px;">Your requests:</p>
-        {% for r in my_requests %}
-        <div class="status-row">
-            <span>{{ r.guild_name }}</span>
-            <span class="status-badge status-{{ r.status }}">{{ r.status }}</span>
+        {% if server_cards %}
+        <div style="margin-top: 18px;">
+        {% for card in server_cards %}
+        <div class="status-row" style="gap: 14px;">
+            <div style="min-width: 0;">
+                <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ card.guild.name }}</strong>
+                <span style="color: #8b93a1; font-size: 11px;">
+                    {% if card.action == 'console' %}Bot connected{% elif card.action == 'invite' %}Approved, bot not added{% elif card.entry %}Access {{ card.entry.status }}{% else %}Bot not added{% endif %}
+                </span>
+            </div>
+            {% if card.action == 'request' %}
+            <form method="POST" style="margin: 0; flex: 0 0 auto;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="guild_id" value="{{ card.guild.id }}">
+                <button type="submit" style="width: auto; margin: 0; white-space: nowrap;">{{ card.action_label }}</button>
+            </form>
+            {% elif card.action_url %}
+            <a href="{{ card.action_url }}" style="background: #dc2626; color: #fff; padding: 10px 12px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600; white-space: nowrap;">{{ card.action_label }}</a>
+            {% else %}
+            <span style="color: #8b93a1; font-size: 12px;">Invite unavailable</span>
+            {% endif %}
         </div>
         {% endfor %}
-        {% endif %}
-
-        {% if admin_guilds %}
-        <form method="POST" style="margin-top: 18px;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <select name="guild_id" required>
-                {% for g in admin_guilds %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
-            </select>
-            <textarea name="note" placeholder="Optional note (why you'd like access)" rows="3"></textarea>
-            <button type="submit">Submit Request</button>
-        </form>
+        </div>
         {% else %}
         <p class="sub">No servers found where you're the owner or an administrator.</p>
         {% endif %}

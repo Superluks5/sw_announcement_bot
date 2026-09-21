@@ -102,7 +102,7 @@ class OwnerPanelTests(unittest.TestCase):
 
         response = self.client.get("/request-access")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Submit Request", response.data)
+        self.assertIn(b"Request access", response.data)
 
         with self.client.session_transaction() as session:
             csrf_token = session["csrf_token"]
@@ -119,6 +119,17 @@ class OwnerPanelTests(unittest.TestCase):
             owner_discord_name="owner",
             note="Subserver",
         )
+
+    def test_bot_invite_can_target_a_specific_server(self):
+        response = type("Response", (), {
+            "status_code": 200,
+            "json": lambda self: {"id": "987"},
+        })()
+        with patch.object(dashboard_app.requests, "get", return_value=response):
+            invite_url = dashboard_app.bot_invite_url(789)
+        self.assertIn("client_id=987", invite_url)
+        self.assertIn("guild_id=789", invite_url)
+        self.assertIn("disable_guild_select=true", invite_url)
 
 
 if __name__ == "__main__":

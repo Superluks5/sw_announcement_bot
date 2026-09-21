@@ -277,8 +277,13 @@ def available_dashboard_guilds() -> list[dict]:
     if ALLOWED_USER_IDS and user_id in ALLOWED_USER_IDS:
         guilds.append({"id": str(GUILD_ID), "name": "Primary server"})
 
+    administered_ids = {str(guild["id"]) for guild in session.get("administered_guilds", [])}
     if user_id.isdigit():
-        for entry in reg.get_approved_guilds_for_owner(int(user_id)):
+        for entry in reg.list_all():
+            if entry.status != "approved":
+                continue
+            if str(entry.guild_id) not in administered_ids and entry.owner_discord_id != int(user_id):
+                continue
             if str(entry.guild_id) not in {g["id"] for g in guilds}:
                 guilds.append({"id": str(entry.guild_id), "name": entry.guild_name})
 
@@ -1028,14 +1033,36 @@ def request_access_page():
         return redirect(url_for("request_access_page"))
 
     admin_guilds = session.get("administered_guilds", [])
-    my_requests = [reg.get_request_for_guild(int(g["id"])) for g in admin_guilds]
-    my_requests = [r for r in my_requests if r is not None]
+    server_cards = []
+    for guild in admin_guilds:
+        entry = reg.get_request_for_guild(int(guild["id"]))
+        if entry and entry.status == "approved" and entry.bot_present:
+            action = "console"
+            action_label = "Open console"
+        elif entry and entry.status == "approved":
+            action = "invite"
+            action_label = "Add bot"
+        else:
+            action = "request"
+            action_label = "Request access" if not entry else f"Request again ({entry.status})"
+        action_url = None
+        if action == "console":
+            action_url = url_for("select_server", guild_id=int(guild["id"]))
+        elif action == "invite":
+            action_url = bot_invite_url(int(guild["id"]))
+        server_cards.append({
+            "guild": guild,
+            "entry": entry,
+            "action": action,
+            "action_label": action_label,
+            "action_url": action_url,
+        })
 
     return render_template(
         "request_access.html",
         username=session.get("username"),
         admin_guilds=admin_guilds,
-        my_requests=my_requests,
+        server_cards=server_cards,
     )
 
 
@@ -1314,7 +1341,7 @@ def leave_discord_guild(guild_id: int) -> bool:
         return False
 
 
-def bot_invite_url() -> str | None:
+def bot_invite_url(guild_id: int | None = None) -> str | None:
     """Build an invite URL for the bot represented by ``DISCORD_TOKEN``.
 
     The dashboard OAuth client may be a separate DEV application, so its
@@ -1336,11 +1363,15 @@ def bot_invite_url() -> str | None:
         bot_id = response.json().get("id")
         if not bot_id:
             return None
-        params = urlencode({
+        params = {
             "client_id": bot_id,
             "scope": "bot applications.commands",
             "permissions": BOT_INVITE_PERMISSIONS,
-        })
+        }
+        if guild_id is not None:
+            params["guild_id"] = str(guild_id)
+            params["disable_guild_select"] = "true"
+        params = urlencode(params)
         return f"https://discord.com/oauth2/authorize?{params}"
     except Exception as e:
         print(f"⚠️ Failed to build bot invite URL: {e}")
