@@ -35,14 +35,14 @@ REVIEW_INVITE_MAX_AGE = int(os.environ.get("REVIEW_INVITE_MAX_AGE", "86400"))
 
 # Edit this list to change the bot's rotating Discord presence. Each entry is
 # (activity type, text), and the loop below advances every five minutes.
-PRESENCE_ROTATION_MINUTES = 5
 PRESENCE_ACTIVITIES = (
     (discord.ActivityType.watching, "the galaxy • Luksera"),
-    (discord.ActivityType.playing, "with Luksera"),
-    (discord.ActivityType.watching, "over the Republic"),
-    (discord.ActivityType.playing, "Star Wars • Luksera"),
-    (discord.ActivityType.watching, "Discord communities • Luksera"),
+    (discord.ActivityType.watching, "the Republic • Luksera"),
+    (discord.ActivityType.watching, "Discord communities"),
+    (discord.ActivityType.watching, "the galaxy"),
+    (discord.ActivityType.watching, "Luksera communities"),
 )
+
 
 LOCAL_LOG_FILE = os.path.join(os.path.dirname(__file__), "bot_logs.json")
 MAX_LOCAL_LOGS = 300
