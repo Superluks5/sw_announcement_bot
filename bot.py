@@ -35,6 +35,7 @@ REVIEW_INVITE_MAX_AGE = int(os.environ.get("REVIEW_INVITE_MAX_AGE", "86400"))
 
 # Edit this list to change the bot's rotating Discord presence. Each entry is
 # (activity type, text), and the loop below advances every five minutes.
+PRESENCE_ROTATION_MINUTES = 5
 PRESENCE_ACTIVITIES = (
     (discord.ActivityType.watching, "the galaxy • Luksera"),
     (discord.ActivityType.watching, "the Republic • Luksera"),
