@@ -5,6 +5,9 @@ Maintains a directory of partnered servers/creators, posted as a "live"
 message that auto-updates whenever a partner is added or removed - same
 pattern as /roadmap and /team.
 
+Per-server: each server using the shared bot gets its own partner
+directory, stored under guild_data/<guild_id>/partner_data.json.
+
 Subcommands:
   /partner add    - add a partner with a name, link, and optional note
   /partner remove - remove a partner by its number
@@ -18,13 +21,14 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "partner_data.json")
+from guild_paths import guild_file
 
 
-def load_data() -> dict:
-    if not os.path.exists(DATA_FILE):
+def load_data(guild_id: int) -> dict:
+    path = guild_file(guild_id, "partner_data.json")
+    if not os.path.exists(path):
         return {"partners": [], "channel_id": None, "message_id": None}
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
     data.setdefault("partners", [])
     data.setdefault("channel_id", None)
@@ -32,8 +36,9 @@ def load_data() -> dict:
     return data
 
 
-def save_data(data: dict):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+def save_data(guild_id: int, data: dict):
+    path = guild_file(guild_id, "partner_data.json")
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
@@ -58,24 +63,30 @@ def build_partner_embed(data: dict) -> discord.Embed:
 class PartnerList(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._last_mtime = None
+        self._last_mtimes: dict[int, float] = {}
         self.watch_for_changes.start()
 
     def cog_unload(self):
         self.watch_for_changes.cancel()
 
+    def _known_guild_ids(self) -> set[int]:
+        return {g.id for g in self.bot.guilds}
+
     @tasks.loop(seconds=5)
     async def watch_for_changes(self):
-        if not os.path.exists(DATA_FILE):
-            return
-        mtime = os.path.getmtime(DATA_FILE)
-        if self._last_mtime is None:
-            self._last_mtime = mtime
-            return
-        if mtime != self._last_mtime:
-            self._last_mtime = mtime
-            data = load_data()
-            await self.refresh_live_message(data)
+        for guild_id in self._known_guild_ids():
+            path = guild_file(guild_id, "partner_data.json")
+            if not os.path.exists(path):
+                continue
+            mtime = os.path.getmtime(path)
+            last = self._last_mtimes.get(guild_id)
+            if last is None:
+                self._last_mtimes[guild_id] = mtime
+                continue
+            if mtime != last:
+                self._last_mtimes[guild_id] = mtime
+                data = load_data(guild_id)
+                await self.refresh_live_message(data)
 
     @watch_for_changes.before_loop
     async def before_watch(self):
@@ -111,9 +122,9 @@ class PartnerList(commands.Cog):
         note="Optional short note about them",
     )
     async def add(self, interaction: discord.Interaction, name: str, link: str, note: str = ""):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         data["partners"].append({"name": name, "link": link, "note": note})
-        save_data(data)
+        save_data(interaction.guild_id, data)
         updated_live = await self.refresh_live_message(data)
         note_text = "" if updated_live else "\n*(No live directory message set yet - use `/partner show` in a channel first.)*"
         await interaction.response.send_message(f"✅ Added partner **{name}**.{note_text}", ephemeral=True)
@@ -121,7 +132,7 @@ class PartnerList(commands.Cog):
     @partner_group.command(name="remove", description="Remove a partner by its number")
     @app_commands.describe(number="Partner number (see /partner show)")
     async def remove(self, interaction: discord.Interaction, number: int):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         partners = data["partners"]
 
         if number < 1 or number > len(partners):
@@ -131,30 +142,30 @@ class PartnerList(commands.Cog):
             return
 
         removed = partners.pop(number - 1)
-        save_data(data)
+        save_data(interaction.guild_id, data)
         updated_live = await self.refresh_live_message(data)
         note_text = "" if updated_live else "\n*(No live directory message set yet - use `/partner show` in a channel first.)*"
         await interaction.response.send_message(f"🗑️ Removed partner **{removed['name']}**.{note_text}", ephemeral=True)
 
     @partner_group.command(name="clear", description="Clear the entire partner directory")
     async def clear(self, interaction: discord.Interaction):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         data["partners"] = []
-        save_data(data)
+        save_data(interaction.guild_id, data)
         updated_live = await self.refresh_live_message(data)
         note_text = "" if updated_live else "\n*(No live directory message set yet - use `/partner show` in a channel first.)*"
         await interaction.response.send_message(f"🧹 Partner directory cleared.{note_text}", ephemeral=True)
 
     @partner_group.command(name="show", description="Post (or move) the live partner directory to this channel")
     async def show(self, interaction: discord.Interaction):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         embed = build_partner_embed(data)
         await interaction.response.send_message(embed=embed)
         sent_message = await interaction.original_response()
 
         data["channel_id"] = interaction.channel_id
         data["message_id"] = sent_message.id
-        save_data(data)
+        save_data(interaction.guild_id, data)
 
 
 async def setup(bot: commands.Bot):
