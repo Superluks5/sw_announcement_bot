@@ -263,19 +263,50 @@ def fetch_guild_roles() -> list[dict]:
         return _roles_cache["data"] or []
 
 
+def available_dashboard_guilds() -> list[dict]:
+    """The ONLY source of truth for which guilds a user can access via the
+    dashboard - deliberately based on registry approval, never on the raw
+    Discord admin/owner list a user's OAuth token reports. Someone can
+    administer a Discord server that was never approved (or was denied) -
+    that must never be enough to see or edit that server's data here."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return []
+
+    guilds = []
+    if ALLOWED_USER_IDS and user_id in ALLOWED_USER_IDS:
+        guilds.append({"id": str(GUILD_ID), "name": "Primary server"})
+
+    if user_id.isdigit():
+        for entry in reg.get_approved_guilds_for_owner(int(user_id)):
+            if str(entry.guild_id) not in {g["id"] for g in guilds}:
+                guilds.append({"id": str(entry.guild_id), "name": entry.guild_name})
+
+    return guilds
+
+
 def login_required(view):
-    """Gate for the existing, single-server dashboard - re-checks the
-    allowlist on every request (not just once at login), so it stays exactly
-    as protected as before even though /callback now issues a session to
-    ANY successfully authenticated Discord user (needed for the new
-    request-access flow below)."""
+    """Gate for the guild-scoped dashboard. Grants access to the primary
+    owner (ALLOWED_USER_IDS, unchanged behavior) OR anyone with at least
+    one registry-approved guild. Re-validates on EVERY request, not just
+    at login/select time - so if a super admin later denies/disables a
+    guild mid-session, the very next page load re-derives a valid guild
+    instead of continuing to silently operate on a revoked one."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         user_id = session.get("user_id")
-        if not user_id or (ALLOWED_USER_IDS and user_id not in ALLOWED_USER_IDS):
+        if not user_id:
             return redirect(url_for("login"))
-        if "guild_id" not in session:
-            session["guild_id"] = int(GUILD_ID)
+
+        authorized = available_dashboard_guilds()
+        if not authorized:
+            return redirect(url_for("login"))
+
+        authorized_ids = {int(g["id"]) for g in authorized}
+        current = session.get("guild_id")
+        if current is None or int(current) not in authorized_ids:
+            session["guild_id"] = int(authorized[0]["id"])
+
         return view(*args, **kwargs)
     return wrapped
 
@@ -293,15 +324,6 @@ def any_login_required(view):
 
 def current_guild_id() -> int:
     return int(session.get("guild_id", GUILD_ID))
-
-
-def available_dashboard_guilds() -> list[dict]:
-    guilds = session.get("administered_guilds", [])
-    if guilds:
-        return guilds
-    if session.get("user_id") in ALLOWED_USER_IDS:
-        return [{"id": str(GUILD_ID), "name": "Primary server"}]
-    return []
 
 
 def selected_guild_file(filename: str) -> str:
