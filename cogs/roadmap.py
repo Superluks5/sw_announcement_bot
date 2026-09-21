@@ -6,6 +6,10 @@ Game Development) and STATUS (Planned / In Progress / Done) for each item.
 One "live" message is tracked (set via /roadmap show) and automatically
 edited whenever items are added, removed, or cleared.
 
+Per-server: each server using the shared bot gets its own roadmap data,
+stored under guild_data/<guild_id>/roadmap_data.json - two communities
+never see or affect each other's roadmap.
+
 Subcommands:
   /roadmap add     - add an item under an area + status
   /roadmap remove  - remove an item by its number (numbers shown in /roadmap show)
@@ -20,7 +24,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "roadmap_data.json")
+from guild_paths import guild_file
 
 # Add/remove/rename areas here to fit your project - no other code needs to change
 AREAS = {
@@ -35,18 +39,13 @@ STATUSES = {
     "done": "✅ Done",
 }
 
-DEFAULT_DATA = {
-    "items": [],  # each item: {"area": str, "status": str, "text": str}
-    "channel_id": None,
-    "message_id": None,
-}
 
-
-def load_data() -> dict:
-    if not os.path.exists(DATA_FILE):
+def load_data(guild_id: int) -> dict:
+    path = guild_file(guild_id, "roadmap_data.json")
+    if not os.path.exists(path):
         return {"items": [], "channel_id": None, "message_id": None}
 
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     # Migrate old flat format (planned/in_progress/done as plain lists) if present
@@ -67,8 +66,9 @@ def load_data() -> dict:
     return data
 
 
-def save_data(data: dict):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+def save_data(guild_id: int, data: dict):
+    path = guild_file(guild_id, "roadmap_data.json")
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
@@ -122,29 +122,38 @@ status_choices = [app_commands.Choice(name=label, value=key) for key, label in S
 class Roadmap(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._last_mtime = None
+        self._last_mtimes: dict[int, float] = {}  # guild_id -> last seen mtime
         self.watch_for_changes.start()
 
     def cog_unload(self):
         self.watch_for_changes.cancel()
 
+    def _known_guild_ids(self) -> set[int]:
+        """Every guild this bot is currently a member of - each one might
+        have its own roadmap_data.json to watch."""
+        return {g.id for g in self.bot.guilds}
+
     @tasks.loop(seconds=5)
     async def watch_for_changes(self):
         """Picks up edits made from anywhere - not just Discord commands, but
-        also the web dashboard writing roadmap_data.json directly - and keeps
-        the live Discord message in sync within a few seconds either way."""
-        if not os.path.exists(DATA_FILE):
-            return
+        also the web dashboard writing a guild's roadmap_data.json directly -
+        and keeps that server's live Discord message in sync within a few
+        seconds either way. Checks every server the bot is currently in."""
+        for guild_id in self._known_guild_ids():
+            path = guild_file(guild_id, "roadmap_data.json")
+            if not os.path.exists(path):
+                continue
 
-        mtime = os.path.getmtime(DATA_FILE)
-        if self._last_mtime is None:
-            self._last_mtime = mtime  # first run - just record it, don't refresh yet
-            return
+            mtime = os.path.getmtime(path)
+            last = self._last_mtimes.get(guild_id)
+            if last is None:
+                self._last_mtimes[guild_id] = mtime  # first time seeing this guild - just record it
+                continue
 
-        if mtime != self._last_mtime:
-            self._last_mtime = mtime
-            data = load_data()
-            await self.refresh_live_message(data)
+            if mtime != last:
+                self._last_mtimes[guild_id] = mtime
+                data = load_data(guild_id)
+                await self.refresh_live_message(data)
 
     @watch_for_changes.before_loop
     async def before_watch(self):
@@ -188,9 +197,9 @@ class Roadmap(commands.Cog):
         status: app_commands.Choice[str],
         item: str,
     ):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         data["items"].append({"area": area.value, "status": status.value, "text": item})
-        save_data(data)
+        save_data(interaction.guild_id, data)
         updated_live = await self.refresh_live_message(data)
 
         note = "" if updated_live else "\n*(No live roadmap message set yet - use `/roadmap show` in a channel first.)*"
@@ -206,7 +215,7 @@ class Roadmap(commands.Cog):
     )
     @app_commands.choices(area=area_choices)
     async def remove(self, interaction: discord.Interaction, area: app_commands.Choice[str], number: int):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         ordered = get_numbered_items(data, area.value)
 
         if number < 1 or number > len(ordered):
@@ -219,7 +228,7 @@ class Roadmap(commands.Cog):
 
         target = ordered[number - 1]
         data["items"].remove(target)
-        save_data(data)
+        save_data(interaction.guild_id, data)
         updated_live = await self.refresh_live_message(data)
 
         note = "" if updated_live else "\n*(No live roadmap message set yet - use `/roadmap show` in a channel first.)*"
@@ -241,7 +250,7 @@ class Roadmap(commands.Cog):
         number: int,
         status: app_commands.Choice[str],
     ):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         ordered = get_numbered_items(data, area.value)
 
         if number < 1 or number > len(ordered):
@@ -263,7 +272,7 @@ class Roadmap(commands.Cog):
 
         old_status = target["status"]
         target["status"] = status.value
-        save_data(data)
+        save_data(interaction.guild_id, data)
         updated_live = await self.refresh_live_message(data)
 
         note = "" if updated_live else "\n*(No live roadmap message set yet - use `/roadmap show` in a channel first.)*"
@@ -284,7 +293,7 @@ class Roadmap(commands.Cog):
         area: app_commands.Choice[str],
         status: app_commands.Choice[str] = None,
     ):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         if status:
             data["items"] = [
                 i for i in data["items"] if not (i["area"] == area.value and i["status"] == status.value)
@@ -294,7 +303,7 @@ class Roadmap(commands.Cog):
             data["items"] = [i for i in data["items"] if i["area"] != area.value]
             label = AREAS[area.value]
 
-        save_data(data)
+        save_data(interaction.guild_id, data)
         updated_live = await self.refresh_live_message(data)
 
         note = "" if updated_live else "\n*(No live roadmap message set yet - use `/roadmap show` in a channel first.)*"
@@ -302,14 +311,14 @@ class Roadmap(commands.Cog):
 
     @roadmap_group.command(name="show", description="Post (or move) the live roadmap message to this channel")
     async def show(self, interaction: discord.Interaction):
-        data = load_data()
+        data = load_data(interaction.guild_id)
         embed = build_roadmap_embed(data)
         await interaction.response.send_message(embed=embed)
         sent_message = await interaction.original_response()
 
         data["channel_id"] = interaction.channel_id
         data["message_id"] = sent_message.id
-        save_data(data)
+        save_data(interaction.guild_id, data)
 
 
 async def setup(bot: commands.Bot):
