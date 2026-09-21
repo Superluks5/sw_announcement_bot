@@ -1,11 +1,14 @@
 """
 Server Config (welcome/leave messages, auto-role)
 ------------------------------------------
-Reads server_config.json (edited via the web dashboard's Server Config tab,
-or by hand) and acts on member join/leave events accordingly. No slash
-commands here on purpose - this is dashboard-managed.
+Reads a per-server config (edited via the web dashboard's Server Config
+tab, or by hand) and acts on member join/leave events accordingly. No
+slash commands here on purpose - this is dashboard-managed.
 
-server_config.json fields (all optional, gitignored, per-machine):
+Per-server: stored under guild_data/<guild_id>/server_config.json, so
+each community's welcome message, auto-role, etc. are independent.
+
+Fields (all optional):
 {
   "welcome_channel_id": "123...",
   "welcome_message": "Welcome {mention} to {server}!",
@@ -23,7 +26,7 @@ import json
 import discord
 from discord.ext import commands
 
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "server_config.json")
+from guild_paths import guild_file
 
 DEFAULT_CONFIG = {
     "welcome_channel_id": None,
@@ -35,12 +38,13 @@ DEFAULT_CONFIG = {
 }
 
 
-def load_config() -> dict:
-    if not os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+def load_config(guild_id: int) -> dict:
+    path = guild_file(guild_id, "server_config.json")
+    if not os.path.exists(path):
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(DEFAULT_CONFIG, f, indent=2)
         return dict(DEFAULT_CONFIG)
-    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
     merged = dict(DEFAULT_CONFIG)
     merged.update(data)
@@ -61,7 +65,7 @@ class ServerConfig(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
-        config = load_config()
+        config = load_config(member.guild.id)
 
         if config.get("auto_role_id"):
             role = member.guild.get_role(int(config["auto_role_id"]))
@@ -81,7 +85,7 @@ class ServerConfig(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
-        config = load_config()
+        config = load_config(member.guild.id)
 
         if config.get("leave_channel_id"):
             channel = member.guild.get_channel(int(config["leave_channel_id"]))
