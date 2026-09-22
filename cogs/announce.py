@@ -17,6 +17,18 @@ polish on or off - they always survive AI polish untouched):
 
 Only the ping chosen in the command's `ping`/`role` options actually
 sends a notification - anything inserted via a placeholder is silent.
+
+Per-server settings (guild_data/<guild_id>/announce_config.json):
+  - "divisions": the signing-line/rank dropdown options - configurable
+    per server via /announce-config divisions-add / divisions-remove /
+    divisions-list, instead of editing code.
+  - "ai_enabled": lets a server turn AI polishing off entirely via
+    /announce-config ai, regardless of what a user picks in the command.
+  - "groq_api_key": a server's own Groq key (from /announce-config
+    groq-key-set), used instead of the bot-wide shared key from the
+    GROQ_API_KEY env var. /announce-config groq-key-clear removes it.
+The server name shown in the posted announcement is always the live
+Discord server name (guild.name) - no per-server setup needed for that.
 """
 
 import os
@@ -30,11 +42,12 @@ from discord import app_commands
 from discord.ext import commands
 from groq import Groq
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-SERVER_NAME = os.environ.get("SERVER_NAME", "Your Server Name")
-MODEL = "openai/gpt-oss-120b"  # llama-3.3-70b-versatile was decommissioned by Groq on Aug 16, 2026
+from guild_paths import guild_file
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+# Shared bot-wide fallback key - used for any server that hasn't set its
+# own key via /announce-config groq-key-set.
+FALLBACK_GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+MODEL = "openai/gpt-oss-120b"  # llama-3.3-70b-versatile was decommissioned by Groq on Aug 16, 2026
 
 TEMPLATE = """🌌 「 SERVER ANNOUNCEMENT 」 🌌
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -59,10 +72,48 @@ TEMPLATE = """🌌 「 SERVER ANNOUNCEMENT 」 🌌
 🛰️ {server_name}"""
 
 
-# Edit this list to match your server's actual divisions/commands.
-# "custom" always gets added automatically as the last dropdown option.
-DIVISIONS = ["Supreme Command", "High Command", "Naval Command", "Intelligence Bureau"]
-DEFAULT_DIVISION = DIVISIONS[0]
+# Seed divisions used only the first time a server's announce_config.json
+# is created. After that, each server's list is edited via
+# /announce-config divisions-add / divisions-remove, not by editing code.
+DEFAULT_DIVISIONS = ["Supreme Command", "High Command", "Naval Command", "Intelligence Bureau"]
+
+DEFAULT_ANNOUNCE_CONFIG = {
+    "divisions": DEFAULT_DIVISIONS,
+    "ai_enabled": True,
+    "groq_api_key": None,
+}
+
+# Discord select menus cap at 25 options; one slot is always reserved for
+# the "Custom..." entry the dropdown adds automatically.
+MAX_DIVISIONS = 24
+
+
+def load_announce_config(guild_id: int) -> dict:
+    path = guild_file(guild_id, "announce_config.json")
+    if not os.path.exists(path):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(DEFAULT_ANNOUNCE_CONFIG, f, indent=2)
+        return dict(DEFAULT_ANNOUNCE_CONFIG)
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    merged = dict(DEFAULT_ANNOUNCE_CONFIG)
+    merged.update(data)
+    return merged
+
+
+def save_announce_config(guild_id: int, config: dict) -> None:
+    path = guild_file(guild_id, "announce_config.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+
+
+def get_groq_client(config: dict) -> Groq | None:
+    """Server's own key if set, else the shared fallback key. None if
+    neither is available (AI polish can't run for this server)."""
+    key = config.get("groq_api_key") or FALLBACK_GROQ_API_KEY
+    if not key:
+        return None
+    return Groq(api_key=key)
 
 
 MENTION_PLACEHOLDER = re.compile(r"\{(#|@)([^{}]+)\}")
@@ -217,7 +268,7 @@ def restore_placeholders(text: str, mapping: dict[str, str]) -> str:
     return text
 
 
-def polish_text(draft: str) -> tuple[str, str]:
+def polish_text(draft: str, client: Groq) -> tuple[str, str]:
     prompt = f"""You are helping write a professional Discord server announcement
 for a Star Wars themed Roblox game community taking place in the Imperial Timeline. (Roblox Game is in Development) Take the rough draft below and:
 
@@ -240,7 +291,7 @@ Respond ONLY in this exact format, nothing else:
 TITLE: <title here>
 BODY: <body here>"""
 
-    response = groq_client.chat.completions.create(
+    response = client.chat.completions.create(
         model=MODEL,
         max_tokens=1000,
         messages=[{"role": "user", "content": prompt}],
@@ -260,8 +311,11 @@ BODY: <body here>"""
     return title, body
 
 
-def build_message(title, body, ann_number, timestamp, user_name, rank, ping_mention, division=DEFAULT_DIVISION):
-    """Build the final formatted message and its preview text from all the pieces."""
+def build_message(title, body, ann_number, timestamp, user_name, rank, ping_mention, server_name, division):
+    """Build the final formatted message and its preview text from all the pieces.
+    server_name and division are always passed in explicitly by the caller -
+    server_name is the live guild.name, division comes from that server's
+    configured divisions list (or a custom signing line the user typed)."""
     final_message = TEMPLATE.format(
         title=title,
         body=body,
@@ -270,7 +324,7 @@ def build_message(title, body, ann_number, timestamp, user_name, rank, ping_ment
         user_name=user_name,
         rank=rank,
         division=division,
-        server_name=SERVER_NAME,
+        server_name=server_name,
     )
     message_to_post = f"{ping_mention}\n{final_message}" if ping_mention else final_message
     preview_text = (
@@ -284,15 +338,17 @@ def build_message(title, body, ann_number, timestamp, user_name, rank, ping_ment
 class AnnounceModal(discord.ui.Modal, title="New Announcement"):
     def __init__(
         self,
+        server_name: str,
         ping_mention: str = "",
         ping_value: str = "none",
         ping_role: discord.Role = None,
         image_bytes: bytes = None,
         image_filename: str = None,
         ai_polish: bool = True,
-        division: str = DEFAULT_DIVISION,
+        division: str = None,
     ):
         super().__init__()
+        self.server_name = server_name
         self.ping_mention = ping_mention
         self.ping_value = ping_value
         self.ping_role = ping_role
@@ -350,9 +406,21 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
         await interaction.response.defer(thinking=True, ephemeral=True)
 
         if self.ai_polish:
+            config = load_announce_config(interaction.guild.id)
+            client = get_groq_client(config)
+            if client is None:
+                # Shouldn't normally happen (the command already checks this),
+                # but if it does, fail gracefully instead of erroring out.
+                await interaction.followup.send(
+                    "❌ AI polishing isn't available for this server - no Groq API key is "
+                    "configured. Ask an admin to run `/announce-config groq-key-set`, or "
+                    "rerun with `ai_polish` off.",
+                    ephemeral=True,
+                )
+                return
             try:
                 tokenized_draft, token_map = tokenize_placeholders(self.draft.value)
-                title, body = polish_text(tokenized_draft)
+                title, body = polish_text(tokenized_draft, client)
                 title = restore_placeholders(title, token_map)
                 body = restore_placeholders(body, token_map)
             except Exception as e:
@@ -388,6 +456,7 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
             user_name=self.user_name.value,
             rank=self.rank.value,
             ping_mention=self.ping_mention,
+            server_name=self.server_name,
             division=self.division,
         )
 
@@ -401,6 +470,7 @@ class AnnounceModal(discord.ui.Modal, title="New Announcement"):
             ping_mention=self.ping_mention,
             ping_value=self.ping_value,
             ping_role=self.ping_role,
+            server_name=self.server_name,
             division=self.division,
             image_bytes=self.image_bytes,
             image_filename=self.image_filename,
@@ -463,6 +533,7 @@ class EditModal(discord.ui.Modal, title="Edit Announcement Text"):
             user_name=self.parent_view.user_name,
             rank=self.parent_view.rank,
             ping_mention=self.parent_view.ping_mention,
+            server_name=self.parent_view.server_name,
             division=self.parent_view.division,
         )
         self.parent_view.message_to_post = message_to_post
@@ -490,9 +561,10 @@ class ConfirmView(discord.ui.View):
         user_name,
         rank,
         ping_mention,
+        server_name,
+        division,
         ping_value="none",
         ping_role=None,
-        division=DEFAULT_DIVISION,
         image_bytes=None,
         image_filename=None,
     ):
@@ -506,11 +578,12 @@ class ConfirmView(discord.ui.View):
         self.ping_mention = ping_mention
         self.ping_value = ping_value
         self.ping_role = ping_role
+        self.server_name = server_name
         self.division = division
         self.image_bytes = image_bytes
         self.image_filename = image_filename
         self.message_to_post, _ = build_message(
-            title, body, ann_number, timestamp, user_name, rank, ping_mention, division
+            title, body, ann_number, timestamp, user_name, rank, ping_mention, server_name, division
         )
 
     @discord.ui.button(label="Edit text", style=discord.ButtonStyle.blurple, emoji="✏️")
@@ -551,8 +624,9 @@ class CustomDivisionModal(discord.ui.Modal, title="Custom Signing Line"):
     dropdown. Submitting it immediately opens the main announcement form -
     modal-to-modal chaining works because each submission is a fresh interaction."""
 
-    def __init__(self, ping_mention, ping_value, ping_role, image_bytes, image_filename, ai_polish):
+    def __init__(self, server_name, ping_mention, ping_value, ping_role, image_bytes, image_filename, ai_polish):
         super().__init__()
+        self.server_name = server_name
         self.ping_mention = ping_mention
         self.ping_value = ping_value
         self.ping_role = ping_role
@@ -571,6 +645,7 @@ class CustomDivisionModal(discord.ui.Modal, title="Custom Signing Line"):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.send_modal(
             AnnounceModal(
+                server_name=self.server_name,
                 ping_mention=self.ping_mention,
                 ping_value=self.ping_value,
                 ping_role=self.ping_role,
@@ -587,23 +662,26 @@ class OpenFormView(discord.ui.View):
     modals can't hold a block of help text, only short per-field hints. The
     signing-line dropdown lives here too, since modals can't contain dropdowns."""
 
-    def __init__(self, ping_mention, ping_value, ping_role, image_bytes, image_filename, ai_polish):
+    def __init__(self, server_name, divisions, ping_mention, ping_value, ping_role, image_bytes, image_filename, ai_polish):
         super().__init__(timeout=300)
+        self.server_name = server_name
+        self.divisions = divisions
         self.ping_mention = ping_mention
         self.ping_value = ping_value
         self.ping_role = ping_role
         self.image_bytes = image_bytes
         self.image_filename = image_filename
         self.ai_polish = ai_polish
-        self.division = DEFAULT_DIVISION
+        self.division = divisions[0]
 
         options = [
-            discord.SelectOption(label=name, default=(name == DEFAULT_DIVISION)) for name in DIVISIONS
+            discord.SelectOption(label=name, default=(name == self.division)) for name in divisions
         ]
         options.append(discord.SelectOption(label="Custom...", value="custom"))
         self.division_select.options = options
+        self.division_select.placeholder = f"Signing line: {self.division}"
 
-    @discord.ui.select(placeholder=f"Signing line: {DEFAULT_DIVISION}", options=[])
+    @discord.ui.select(placeholder="Signing line", options=[])
     async def division_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         self.division = select.values[0]
         label = "Custom (you'll be asked to type it next)" if self.division == "custom" else self.division
@@ -619,6 +697,7 @@ class OpenFormView(discord.ui.View):
         if self.division == "custom":
             await interaction.response.send_modal(
                 CustomDivisionModal(
+                    server_name=self.server_name,
                     ping_mention=self.ping_mention,
                     ping_value=self.ping_value,
                     ping_role=self.ping_role,
@@ -631,6 +710,7 @@ class OpenFormView(discord.ui.View):
 
         await interaction.response.send_modal(
             AnnounceModal(
+                server_name=self.server_name,
                 ping_mention=self.ping_mention,
                 ping_value=self.ping_value,
                 ping_role=self.ping_role,
@@ -642,10 +722,20 @@ class OpenFormView(discord.ui.View):
         )
 
 
+def _is_admin(interaction: discord.Interaction) -> bool:
+    return interaction.user.guild_permissions.administrator
+
+
+ADMIN_ONLY_MESSAGE = "⚠️ Only server administrators can change this."
+
+
 class Announce(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    # ------------------------------------------------------------------
+    # /scannounce
+    # ------------------------------------------------------------------
     @app_commands.command(name="scannounce", description="Create and post a formatted server announcement")
     @app_commands.describe(
         ping="Who should be pinged with this announcement",
@@ -693,18 +783,156 @@ class Announce(commands.Cog):
             image_bytes = await image.read()
             image_filename = image.filename
 
+        config = load_announce_config(interaction.guild.id)
+        divisions = config.get("divisions") or DEFAULT_DIVISIONS
+
+        # Server-level AI setting always wins over the user's ai_polish choice.
+        effective_ai_polish = ai_polish and config.get("ai_enabled", True)
+        note = ""
+        if ai_polish and not config.get("ai_enabled", True):
+            note = "\n\n*(AI polishing is turned off for this server - posting your draft as typed.)*"
+        elif effective_ai_polish and get_groq_client(config) is None:
+            effective_ai_polish = False
+            note = (
+                "\n\n*(AI polishing is on but no Groq API key is set for this server - "
+                "posting your draft as typed. An admin can add one with "
+                "`/announce-config groq-key-set`.)*"
+            )
+
         await interaction.response.send_message(
-            PLACEHOLDER_HELP,
+            PLACEHOLDER_HELP + note,
             view=OpenFormView(
+                server_name=interaction.guild.name,
+                divisions=divisions,
                 ping_mention=ping_mention,
                 ping_value=ping_value,
                 ping_role=role,
                 image_bytes=image_bytes,
                 image_filename=image_filename,
-                ai_polish=ai_polish,
+                ai_polish=effective_ai_polish,
             ),
             ephemeral=True,
         )
+
+    # ------------------------------------------------------------------
+    # /announce-config - per-server settings, admin only
+    # ------------------------------------------------------------------
+    config_group = app_commands.Group(
+        name="announce-config",
+        description="Configure /scannounce for this server (admin only)",
+    )
+
+    @config_group.command(name="divisions-list", description="Show this server's signing-line/division options")
+    async def divisions_list(self, interaction: discord.Interaction):
+        config = load_announce_config(interaction.guild.id)
+        divisions = config.get("divisions") or DEFAULT_DIVISIONS
+        await interaction.response.send_message(
+            "**Divisions for this server:**\n" + "\n".join(f"- {d}" for d in divisions),
+            ephemeral=True,
+        )
+
+    @config_group.command(name="divisions-add", description="Add a signing-line/division option for this server")
+    @app_commands.describe(name="Division/rank name to add, e.g. 'Naval Command'")
+    async def divisions_add(self, interaction: discord.Interaction, name: str):
+        if not _is_admin(interaction):
+            await interaction.response.send_message(ADMIN_ONLY_MESSAGE, ephemeral=True)
+            return
+
+        name = name.strip()
+        config = load_announce_config(interaction.guild.id)
+        divisions = config.get("divisions") or list(DEFAULT_DIVISIONS)
+
+        if any(d.lower() == name.lower() for d in divisions):
+            await interaction.response.send_message(f"⚠️ '{name}' is already in the list.", ephemeral=True)
+            return
+        if len(divisions) >= MAX_DIVISIONS:
+            await interaction.response.send_message(
+                f"⚠️ Max {MAX_DIVISIONS} divisions (Discord's dropdown limit, with one slot "
+                "reserved for 'Custom...'). Remove one first with `/announce-config divisions-remove`.",
+                ephemeral=True,
+            )
+            return
+
+        divisions.append(name)
+        config["divisions"] = divisions
+        save_announce_config(interaction.guild.id, config)
+        await interaction.response.send_message(
+            f"✅ Added '{name}'.\n\n**Current list:**\n" + "\n".join(f"- {d}" for d in divisions),
+            ephemeral=True,
+        )
+
+    @config_group.command(name="divisions-remove", description="Remove a signing-line/division option for this server")
+    @app_commands.describe(name="Division/rank name to remove, exactly as it appears in divisions-list")
+    async def divisions_remove(self, interaction: discord.Interaction, name: str):
+        if not _is_admin(interaction):
+            await interaction.response.send_message(ADMIN_ONLY_MESSAGE, ephemeral=True)
+            return
+
+        config = load_announce_config(interaction.guild.id)
+        divisions = config.get("divisions") or list(DEFAULT_DIVISIONS)
+        match = discord.utils.find(lambda d: d.lower() == name.strip().lower(), divisions)
+
+        if match is None:
+            await interaction.response.send_message(
+                f"⚠️ '{name}' isn't in the list. Check `/announce-config divisions-list` for exact spelling.",
+                ephemeral=True,
+            )
+            return
+        if len(divisions) == 1:
+            await interaction.response.send_message(
+                "⚠️ Can't remove the last division - add a replacement first with `divisions-add`.",
+                ephemeral=True,
+            )
+            return
+
+        divisions.remove(match)
+        config["divisions"] = divisions
+        save_announce_config(interaction.guild.id, config)
+        await interaction.response.send_message(
+            f"✅ Removed '{match}'.\n\n**Current list:**\n" + "\n".join(f"- {d}" for d in divisions),
+            ephemeral=True,
+        )
+
+    @config_group.command(name="ai", description="Turn AI polishing on or off for this server")
+    @app_commands.describe(enabled="Allow /scannounce to use AI polishing in this server")
+    async def ai_toggle(self, interaction: discord.Interaction, enabled: bool):
+        if not _is_admin(interaction):
+            await interaction.response.send_message(ADMIN_ONLY_MESSAGE, ephemeral=True)
+            return
+
+        config = load_announce_config(interaction.guild.id)
+        config["ai_enabled"] = enabled
+        save_announce_config(interaction.guild.id, config)
+        state = "enabled" if enabled else "disabled"
+        await interaction.response.send_message(f"✅ AI polishing is now **{state}** for this server.", ephemeral=True)
+
+    @config_group.command(name="groq-key-set", description="Set this server's own Groq API key for AI polishing")
+    @app_commands.describe(key="Your Groq API key from console.groq.com")
+    async def groq_key_set(self, interaction: discord.Interaction, key: str):
+        if not _is_admin(interaction):
+            await interaction.response.send_message(ADMIN_ONLY_MESSAGE, ephemeral=True)
+            return
+
+        config = load_announce_config(interaction.guild.id)
+        config["groq_api_key"] = key.strip()
+        save_announce_config(interaction.guild.id, config)
+        await interaction.response.send_message(
+            "✅ Groq API key saved for this server - it'll be used instead of the shared key from now on. "
+            "(This reply is only visible to you.)",
+            ephemeral=True,
+        )
+
+    @config_group.command(name="groq-key-clear", description="Remove this server's own Groq API key (falls back to the shared key, if any)")
+    async def groq_key_clear(self, interaction: discord.Interaction):
+        if not _is_admin(interaction):
+            await interaction.response.send_message(ADMIN_ONLY_MESSAGE, ephemeral=True)
+            return
+
+        config = load_announce_config(interaction.guild.id)
+        config["groq_api_key"] = None
+        save_announce_config(interaction.guild.id, config)
+        fallback_note = " This server will now use the shared key." if FALLBACK_GROQ_API_KEY else " No shared key is configured, so AI polishing will be unavailable until a new key is set."
+        await interaction.response.send_message(f"✅ Server-specific Groq key removed.{fallback_note}", ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
